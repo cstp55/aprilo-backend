@@ -21,7 +21,14 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::get('/', [AdminConsoleController::class, 'dashboard'])->name('dashboard');
         Route::get('/sources', [AdminConsoleController::class, 'sources'])->name('sources');
         Route::post('/sources', [AdminConsoleController::class, 'storeSource'])->name('sources.store');
-        Route::get('/settings', [AdminConsoleController::class, 'settings'])->name('settings');
+        Route::get('/settings', function () { return redirect()->route('admin.settings.agent'); })->name('settings');
+        Route::get('/settings/agent', [AdminConsoleController::class, 'settingsAgent'])->name('settings.agent');
+        Route::get('/settings/design', [AdminConsoleController::class, 'settingsDesign'])->name('settings.design');
+        Route::get('/settings/connect', [AdminConsoleController::class, 'settingsConnect'])->name('settings.connect');
+        Route::get('/settings/deploy', [AdminConsoleController::class, 'settingsDeploy'])->name('settings.deploy');
+        Route::get('/settings/pricing', [AdminConsoleController::class, 'settingsPricing'])->name('settings.pricing');
+        Route::get('/super', [AdminConsoleController::class, 'superAdminPanel'])->name('super');
+
         Route::get('/logs', [AdminConsoleController::class, 'logs'])->name('logs');
         Route::patch('/settings', [AdminConsoleController::class, 'updateSettings'])->name('settings.update');
         Route::post('/settings/preview', [AdminConsoleController::class, 'previewQuestion'])->name('settings.preview');

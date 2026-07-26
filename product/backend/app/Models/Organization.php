@@ -13,6 +13,11 @@ class Organization extends Model
 
     protected $fillable = ['name', 'status', 'plan'];
 
+    public function getSubdomainAttribute(): string
+    {
+        return strtolower(str_replace(' ', '-', $this->name));
+    }
+
     public function settings(): HasOne
     {
         return $this->hasOne(OrganizationSetting::class);

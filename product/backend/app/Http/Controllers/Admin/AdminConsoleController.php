@@ -54,7 +54,17 @@ class AdminConsoleController extends Controller
     {
         $this->authorizeAdmin($request);
 
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $request->user()->organization_id],
+            [
+                'minutes_saved_per_resolved_question' => 5,
+                'assistant_status' => 'active',
+                'assistant_name' => 'Aprilo Bot',
+            ]
+        );
+
         return view('admin.sources', [
+            'settings' => $settings,
             'sources' => KnowledgeSource::query()
                 ->withCount('chunks')
                 ->where('organization_id', $request->user()->organization_id)
@@ -138,13 +148,11 @@ class AdminConsoleController extends Controller
             ->with('status', 'Source uploaded and indexing started.');
     }
 
-    public function settings(Request $request): View
+    public function settingsAgent(Request $request): View
     {
         $this->authorizeAdmin($request);
-        
-        $tab = $request->query('tab', 'agent');
+        $tab = 'agent';
         $organization = $request->user()->organization;
-
         $settings = OrganizationSetting::firstOrCreate(
             ['organization_id' => $request->user()->organization_id],
             [
@@ -153,10 +161,105 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
-
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
-
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
+    }
+
+    public function settingsDesign(Request $request): View
+    {
+        $this->authorizeAdmin($request);
+        $tab = 'design';
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $request->user()->organization_id],
+            [
+                'minutes_saved_per_resolved_question' => 5,
+                'assistant_status' => 'active',
+                'assistant_name' => 'Aprilo Bot',
+            ]
+        );
+        $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+        return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
+    }
+
+    public function settingsConnect(Request $request): View
+    {
+        $this->authorizeAdmin($request);
+        $tab = 'connect';
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $request->user()->organization_id],
+            [
+                'minutes_saved_per_resolved_question' => 5,
+                'assistant_status' => 'active',
+                'assistant_name' => 'Aprilo Bot',
+            ]
+        );
+        $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+        return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
+    }
+
+    public function settingsDeploy(Request $request): View
+    {
+        $this->authorizeAdmin($request);
+        $tab = 'deploy';
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $request->user()->organization_id],
+            [
+                'minutes_saved_per_resolved_question' => 5,
+                'assistant_status' => 'active',
+                'assistant_name' => 'Aprilo Bot',
+            ]
+        );
+        $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+        return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
+    }
+
+    public function settingsPricing(Request $request): View
+    {
+        $this->authorizeAdmin($request);
+        $tab = 'pricing';
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $request->user()->organization_id],
+            [
+                'minutes_saved_per_resolved_question' => 5,
+                'assistant_status' => 'active',
+                'assistant_name' => 'Aprilo Bot',
+            ]
+        );
+        $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+        return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
+    }
+
+    public function superAdminPanel(Request $request): View
+    {
+        $user = $request->user();
+        abort_unless(
+            $user && $user->organization->name === 'Demo Company' && $user->role === UserRole::Owner->value,
+            403,
+            'Super admin access required.'
+        );
+
+        $organizations = \App\Models\Organization::with(['settings', 'users'])->get();
+        
+        $totalOrganizations = $organizations->count();
+        $totalUsers = \App\Models\User::count();
+        $totalChunks = \App\Models\KnowledgeChunk::count();
+        
+        $mrr = 0.0;
+        foreach ($organizations as $org) {
+            $mrr += match ($org->plan) {
+                'pro' => 49.00,
+                'enterprise' => 199.00,
+                default => 0.00,
+            };
+        }
+
+        $uploads = \App\Models\KnowledgeSource::with(['organization', 'uploader'])->latest()->get();
+
+        return view('admin.super', compact('organizations', 'totalOrganizations', 'totalUsers', 'totalChunks', 'mrr', 'uploads'));
     }
 
     public function updateBillingSettings(Request $request): RedirectResponse
@@ -172,7 +275,7 @@ class AdminConsoleController extends Controller
         $settings->update($validated);
 
         return redirect()
-            ->route('admin.settings', ['tab' => 'pricing'])
+            ->route('admin.settings.pricing')
             ->with('status', 'Billing mode updated successfully!');
     }
 
@@ -216,7 +319,7 @@ class AdminConsoleController extends Controller
         ]);
 
         return redirect()
-            ->route('admin.settings', ['tab' => 'pricing'])
+            ->route('admin.settings.pricing')
             ->with('status', 'Billing cycle closed. Invoice ' . $invoiceNumber . ' generated!');
     }
 
@@ -270,8 +373,9 @@ class AdminConsoleController extends Controller
 
         $settings->update($validated);
 
+        $tab = $request->query('tab', 'agent');
         return redirect()
-            ->route('admin.settings', ['tab' => $request->query('tab', 'agent')])
+            ->route("admin.settings.{$tab}")
             ->with('status', 'Settings updated.');
     }
 
@@ -284,13 +388,13 @@ class AdminConsoleController extends Controller
         // Plan Validation
         if (in_array($platform, ['skype', 'whatsapp'], true) && $plan !== 'enterprise') {
             return redirect()
-                ->route('admin.settings', ['tab' => 'pricing'])
+                ->route('admin.settings.pricing')
                 ->withErrors(['plan' => 'Skype and WhatsApp integrations require an Enterprise subscription plan.']);
         }
 
         if (in_array($platform, ['teams', 'mail'], true) && !in_array($plan, ['pro', 'enterprise'], true)) {
             return redirect()
-                ->route('admin.settings', ['tab' => 'pricing'])
+                ->route('admin.settings.pricing')
                 ->withErrors(['plan' => 'Microsoft Teams and SMTP Email integrations require a Pro or Enterprise subscription plan.']);
         }
 
@@ -307,7 +411,10 @@ class AdminConsoleController extends Controller
             ]
         );
 
-        return view("admin.connect.{$platform}", compact('settings', 'organization'));
+        $tab = 'connect_' . $platform;
+        $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+
+        return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
 
     public function updateConnection(Request $request, string $platform): RedirectResponse
@@ -318,11 +425,11 @@ class AdminConsoleController extends Controller
 
         // Plan Validation
         if (in_array($platform, ['skype', 'whatsapp'], true) && $plan !== 'enterprise') {
-            return redirect()->route('admin.settings', ['tab' => 'pricing']);
+            return redirect()->route('admin.settings.pricing');
         }
 
         if (in_array($platform, ['teams', 'mail'], true) && !in_array($plan, ['pro', 'enterprise'], true)) {
-            return redirect()->route('admin.settings', ['tab' => 'pricing']);
+            return redirect()->route('admin.settings.pricing');
         }
 
         $settings = OrganizationSetting::where('organization_id', $organization->id)->firstOrFail();
@@ -371,7 +478,7 @@ class AdminConsoleController extends Controller
             }
 
             return redirect()
-                ->route('admin.settings', ['tab' => 'connect'])
+                ->route('admin.settings.connect')
                 ->with('status', ucfirst($platform) . ' integration disconnected.');
         }
 
@@ -453,7 +560,7 @@ class AdminConsoleController extends Controller
         $settings->update($validated);
 
         return redirect()
-            ->route('admin.settings', ['tab' => 'connect'])
+            ->route('admin.settings.connect')
             ->with('status', ucfirst($platform) . ' integration successfully configured!');
     }
 
@@ -478,7 +585,7 @@ class AdminConsoleController extends Controller
         ]);
 
         return redirect()
-            ->route('admin.settings', ['tab' => 'pricing'])
+            ->route('admin.settings.pricing')
             ->with('status', 'Subscription upgraded successfully! Your plan is now: ' . ucfirst($validated['plan']));
     }
 

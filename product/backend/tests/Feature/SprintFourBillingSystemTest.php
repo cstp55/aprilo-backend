@@ -80,7 +80,7 @@ class SprintFourBillingSystemTest extends TestCase
 
         $this->post(route('admin.settings.billing.update'), [
             'billing_mode' => 'subscription',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'pricing']));
+        ])->assertRedirect(route('admin.settings.pricing'));
 
         $this->settings->refresh();
         $this->assertEquals('subscription', $this->settings->billing_mode);
@@ -104,7 +104,7 @@ class SprintFourBillingSystemTest extends TestCase
         $this->assertEquals(0.50, $this->settings->usage_amount_due);
 
         $this->post(route('admin.settings.billing.close-cycle'))
-            ->assertRedirect(route('admin.settings', ['tab' => 'pricing']));
+            ->assertRedirect(route('admin.settings.pricing'));
 
         // Verify settings are reset
         $this->settings->refresh();

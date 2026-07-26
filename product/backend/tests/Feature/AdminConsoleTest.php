@@ -34,7 +34,7 @@ class AdminConsoleTest extends TestCase
         $this->post('/admin/login', [
             'email' => 'hr@example.com',
             'password' => 'password',
-        ])->assertRedirect('/admin');
+        ])->assertRedirect('/admin/leaves');
 
         $this->get('/admin')
             ->assertOk()

@@ -45,6 +45,10 @@ class AdminAuthController extends Controller
             ])->onlyInput('email');
         }
 
+        if ($request->user()->role === UserRole::HrAdmin->value) {
+            return redirect()->intended(route('admin.leaves'));
+        }
+
         return redirect()->intended(route('admin.dashboard'));
     }
 

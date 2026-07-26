@@ -4,17 +4,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Aprilo AI Admin')</title>
+    <!-- Import premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --paper: #f7f7f4;
+            --paper: #f8fafc;
             --surface: #ffffff;
-            --ink: #181b1f;
-            --muted: #5b6661;
-            --line: #d8d1c4;
-            --green: lab(55.4814% 75.0732 48.8528);
-            --green-dark: lab(48.4493% 77.4328 61.5452);
-            --amber: #9a5f30;
-            --danger: #9d2b22;
+            --ink: #111827;
+            --muted: #4b5563;
+            --line: #e2e8f0;
+            --green: #2563eb;
+            --green-dark: #1d4ed8;
+            --secondary: #10b981;
+            --amber: #7c3aed;
+            --danger: #ef4444;
         }
 
         * { box-sizing: border-box; }
@@ -22,7 +27,7 @@
             margin: 0;
             background: var(--paper);
             color: var(--ink);
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: 'Outfit', sans-serif;
         }
         a { color: inherit; text-decoration: none; }
         button, input, select {
@@ -40,6 +45,7 @@
             position: sticky;
             top: 0;
             height: 100vh;
+            overflow-y: auto;
         }
         .brand-mark {
             width: 38px;
@@ -65,15 +71,15 @@
             text-transform: uppercase;
         }
         .nav {
-            margin-top: 34px;
+            margin-top: 24px;
             display: grid;
-            gap: 8px;
+            gap: 6px;
         }
         .nav a {
             border-radius: 6px;
-            padding: 10px 12px;
+            padding: 8px 10px;
             color: #34413c;
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 600;
         }
         .nav a.active,
@@ -82,10 +88,9 @@
             color: #fff;
         }
         .logout {
-            position: absolute;
-            left: 22px;
-            right: 22px;
-            bottom: 22px;
+            position: static;
+            margin-top: 24px;
+            padding-bottom: 24px;
         }
         .logout button,
         .button {
@@ -105,6 +110,7 @@
         }
         .main {
             padding: 28px;
+            overflow-y: auto;
         }
         .header {
             display: flex;
@@ -243,21 +249,32 @@
             <div class="brand-title">Aprilo AI</div>
             <div class="brand-subtitle">Admin console</div>
             <nav class="nav">
-                <a class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">Dashboard</a>
-                <a class="{{ request()->routeIs('admin.sources') ? 'active' : '' }}" href="{{ route('admin.sources') }}">Sources</a>
-                <a class="{{ request()->routeIs('admin.escalations') ? 'active' : '' }}" href="{{ route('admin.escalations') }}">Escalations</a>
-                <a class="{{ request()->routeIs('admin.settings') ? 'active' : '' }}" href="{{ route('admin.settings') }}">Settings</a>
-                <a class="{{ request()->routeIs('admin.logs') ? 'active' : '' }}" href="{{ route('admin.logs') }}">Interaction Logs</a>
+                <a class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">📊 Dashboard</a>
+                <a class="{{ request()->routeIs('admin.escalations') ? 'active' : '' }}" href="{{ route('admin.escalations') }}">⚠️ Escalations</a>
                 
-                <div style="margin: 16px 0 6px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">HR Operations</div>
-                <a class="{{ request()->routeIs('admin.leaves') ? 'active' : '' }}" href="{{ route('admin.leaves') }}">Leave Requests</a>
-                <a class="{{ request()->routeIs('admin.wfh') ? 'active' : '' }}" href="{{ route('admin.wfh') }}">WFH Requests</a>
-                <a class="{{ request()->routeIs('admin.employees') ? 'active' : '' }}" href="{{ route('admin.employees') }}">Validate Employee</a>
-                <a class="{{ request()->routeIs('admin.idcards') ? 'active' : '' }}" href="{{ route('admin.idcards') }}">ID Cards</a>
+                <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">HR Operations</div>
+                <a class="{{ request()->routeIs('admin.leaves') ? 'active' : '' }}" href="{{ route('admin.leaves') }}">📅 Leave Requests</a>
+                <a class="{{ request()->routeIs('admin.wfh') ? 'active' : '' }}" href="{{ route('admin.wfh') }}">🏠 WFH Requests</a>
+                <a class="{{ request()->routeIs('admin.employees') ? 'active' : '' }}" href="{{ route('admin.employees') }}">🔍 Validate Employee</a>
+                <a class="{{ request()->routeIs('admin.idcards') ? 'active' : '' }}" href="{{ route('admin.idcards') }}">🪪 ID Cards</a>
+
+                <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">Assistant Settings</div>
+                <a class="{{ request()->routeIs('admin.settings.agent') ? 'active' : '' }}" href="{{ route('admin.settings.agent') }}">🤖 Agent Settings</a>
+                <a class="{{ request()->routeIs('admin.settings.design') ? 'active' : '' }}" href="{{ route('admin.settings.design') }}">🎨 Widget Design</a>
+                <a class="{{ request()->routeIs('admin.settings.connect') || request()->routeIs('admin.settings.connect.*') ? 'active' : '' }}" href="{{ route('admin.settings.connect') }}">🔌 Connect Channels</a>
+                <a class="{{ request()->routeIs('admin.sources') ? 'active' : '' }}" href="{{ route('admin.sources') }}">📚 Knowledge Base</a>
+                <a class="{{ request()->routeIs('admin.settings.deploy') ? 'active' : '' }}" href="{{ route('admin.settings.deploy') }}">🌐 Deploy Script</a>
+                <a class="{{ request()->routeIs('admin.settings.pricing') ? 'active' : '' }}" href="{{ route('admin.settings.pricing') }}">💳 Plans & Pricing</a>
+                <a class="{{ request()->routeIs('admin.logs') ? 'active' : '' }}" href="{{ route('admin.logs') }}">📝 Interaction Logs</a>
+
+                @if (auth()->user() && auth()->user()->organization->name === 'Demo Company' && auth()->user()->role === 'owner')
+                    <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">Platform Admin</div>
+                    <a class="{{ request()->routeIs('admin.super') ? 'active' : '' }}" href="{{ route('admin.super') }}">👑 Super Admin Panel</a>
+                @endif
             </nav>
             <form class="logout" method="POST" action="{{ route('admin.logout') }}">
                 @csrf
-                <button type="submit">Sign out</button>
+                <button type="submit" style="margin-top: 20px;">Sign out</button>
             </form>
         </aside>
         <main class="main">

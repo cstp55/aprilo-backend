@@ -354,7 +354,16 @@ class WidgetChatController extends Controller
         $subdomain = $request->input('subdomain');
         
         if ($subdomain) {
-            $org = Organization::where('name', 'like', "%$subdomain%")->first();
+            // Find organization where name slug matches subdomain
+            $org = Organization::all()->first(function ($o) use ($subdomain) {
+                return strtolower(str_replace(' ', '-', $o->name)) === strtolower($subdomain);
+            });
+            if ($org) {
+                return $org;
+            }
+
+            // Fallback like search
+            $org = Organization::where('name', 'like', '%' . str_replace('-', ' ', $subdomain) . '%')->first();
             if ($org) {
                 return $org;
             }
