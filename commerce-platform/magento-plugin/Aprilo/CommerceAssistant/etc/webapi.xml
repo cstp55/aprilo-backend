@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Aprilo Commerce Assistant
+ * Web API REST routing definition
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <!-- Get Customer details and past order log -->
+    <route url="/V1/aprilo/customer/details" method="GET">
+        <service class="Aprilo\CommerceAssistant\Api\CustomerInterface" method="getDetails"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+    <!-- Update Customer default address details -->
+    <route url="/V1/aprilo/customer/address" method="POST">
+        <service class="Aprilo\CommerceAssistant\Api\CustomerInterface" method="saveAddress"/>
+        <resources>
+            <resource ref="self"/>
+        </resources>
+    </route>
+</config>

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Aprilo Commerce Assistant
+ * Default Configurations
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:App/Config/etc/system_device.xsd">
+    <default>
+        <aprilo_commerce>
+            <general>
+                <active>0</active>
+                <license_key></license_key>
+                <api_secret></api_secret>
+                <platform_url>https://api.aprilo.com</platform_url>
+            </general>
+            <widget>
+                <name>Aprilo Assistant</name>
+                <primary_color>#1A73E8</primary_color>
+                <position>right</position>
+                <greeting>Hello! How can I help you today?</greeting>
+            </widget>
+            <features>
+                <recommendations>1</recommendations>
+                <orders>1</orders>
+                <customer_actions>1</customer_actions>
+            </features>
+        </aprilo_commerce>
+    </default>
+</config>

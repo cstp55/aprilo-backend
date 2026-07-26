@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Aprilo Commerce Assistant
+ * Event Observers mappings
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="customer_login">
+        <observer name="aprilo_customer_login_tracker" instance="Aprilo\CommerceAssistant\Observer\CustomerLogin"/>
+    </event>
+    <event name="sales_order_save_after">
+        <observer name="aprilo_order_status_tracker" instance="Aprilo\CommerceAssistant\Observer\OrderStatusChange"/>
+    </event>
+</config>

@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<!--
+/**
+ * Aprilo Commerce Assistant
+ * Admin Panel Configuration Layout
+ */
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <tab id="aprilo" translate="label" sortOrder="10">
+            <label>Aprilo</label>
+        </tab>
+        <section id="aprilo_commerce" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+            <label>Commerce Assistant</label>
+            <tab>aprilo</tab>
+            <resource>Aprilo_CommerceAssistant::config</resource>
+
+            <!-- General / Credentials Settings -->
+            <group id="general" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Connection Configuration</label>
+                <field id="active" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Assistant Widget</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="license_key" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Store License Key</label>
+                    <comment>Unique license code bound to this shop domain.</comment>
+                </field>
+                <field id="api_secret" translate="label" type="obscure" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>API Secret Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Shared secret key used to secure webhooks and operations.</comment>
+                </field>
+                <field id="platform_url" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Platform Endpoint URL</label>
+                </field>
+            </group>
+
+            <!-- Widget Styling Settings -->
+            <group id="widget" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Widget Visual Settings</label>
+                <field id="name" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Assistant Display Name</label>
+                    <comment>Default: Aprilo Assistant</comment>
+                </field>
+                <field id="primary_color" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Primary Brand Color (Hex)</label>
+                    <comment>e.g., #1A73E8</comment>
+                </field>
+                <field id="launcher_icon" translate="label" type="image" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Launcher Icon Image</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Image</backend_model>
+                    <upload_dir config="system/filesystem/media_resolve" scope_info="1">aprilo/widget</upload_dir>
+                    <base_url type="media" scope_info="1">aprilo/widget</base_url>
+                </field>
+                <field id="position" translate="label" type="select" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Widget Positioning</label>
+                    <source_model>Aprilo\CommerceAssistant\Model\Config\Source\Position</source_model>
+                </field>
+                <field id="greeting" translate="label" type="textarea" sortOrder="50" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Greeting Message</label>
+                </field>
+            </group>
+
+            <!-- Feature Flags Settings -->
+            <group id="features" translate="label" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>AI Feature Settings</label>
+                <field id="recommendations" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Shopping Recommendations</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="orders" translate="label" type="select" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Order Actions</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+                <field id="customer_actions" translate="label" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Enable Customer Profile Modifications</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                </field>
+            </group>
+
+            <!-- Sync Controls -->
+            <group id="sync" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
+                <label>Manual Data Synchronisation</label>
+                <field id="catalog_sync" translate="label" type="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Catalog Data Sync</label>
+                    <frontend_model>Aprilo\CommerceAssistant\Block\Adminhtml\System\Config\SyncButton</frontend_model>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

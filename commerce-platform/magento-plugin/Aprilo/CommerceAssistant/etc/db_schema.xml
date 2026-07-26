@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+/**
+ * Aprilo Commerce Assistant
+ * Declarative Database Schema
+ */
+-->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/db_schema.xsd">
+    <table name="aprilo_sync_queue" resource="default" engine="innodb" comment="Aprilo Sync Queue">
+        <column xsi:type="int" name="id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="varchar" name="entity_type" length="50" nullable="false" comment="Product, Category, CMS"/>
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" comment="Magento Entity ID"/>
+        <column xsi:type="varchar" name="action" length="20" nullable="false" comment="Insert, Update, Delete"/>
+        <column xsi:type="smallint" name="status" unsigned="true" nullable="false" default="0" comment="0=Pending, 1=Success, 2=Failed"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created Time"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="id"/>
+        </constraint>
+        <index referenceId="APRILO_SYNC_QUEUE_STATUS" indexType="btree">
+            <column name="status"/>
+        </index>
+    </table>
+
+    <table name="aprilo_license_state" resource="default" engine="innodb" comment="Aprilo Local License Cache">
+        <column xsi:type="varchar" name="license_key" length="255" nullable="false" comment="Store License Key"/>
+        <column xsi:type="varchar" name="status" length="50" nullable="false" comment="active, suspended, invalid"/>
+        <column xsi:type="timestamp" name="last_verified_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Last verified timestamp"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="license_key"/>
+        </constraint>
+    </table>
+</schema>

@@ -1,0 +1,42 @@
+<?php
+/** @var Aprilo\CommerceAssistant\Block\Adminhtml\System\Config\SyncButton $block */
+?>
+<div class="actions" style="margin-top: 10px;">
+    <button id="aprilo_sync_btn" class="action-default" type="button">
+        <span><?php echo __('Sync Catalog to Aprilo'); ?></span>
+    </button>
+    <span id="aprilo_sync_status" style="margin-left: 10px; font-weight: bold;"></span>
+</div>
+
+<script>
+require([
+    'jquery',
+    'prototype'
+], function ($) {
+    var syncStatus = $('#aprilo_sync_status');
+
+    $('#aprilo_sync_btn').click(function () {
+        syncStatus.text('Syncing...').css('color', '#000000');
+        
+        $.ajax({
+            url: '<?php echo $block->getAjaxUrl(); ?>',
+            type: 'POST',
+            dataType: 'json',
+            showLoader: true,
+            data: {
+                form_key: window.FORM_KEY
+            },
+            success: function (response) {
+                if (response.success) {
+                    syncStatus.text('Sync Complete! Items synced: ' + response.synced).css('color', '#006600');
+                } else {
+                    syncStatus.text('Error: ' + response.message).css('color', '#cc0000');
+                }
+            },
+            error: function () {
+                syncStatus.text('An error occurred during sync call.').css('color', '#cc0000');
+            }
+        });
+    });
+});
+</script>
