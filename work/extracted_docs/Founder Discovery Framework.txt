@@ -1,0 +1,248 @@
+[Heading 1] Founder Discovery Framework (FDF)
+[Heading 2] Version
+[First Paragraph] 0.1
+[Heading 2] Purpose
+[First Paragraph] The Founder Discovery Framework (FDF) defines how the founding team will validate ideas before product development.
+[Body Text] The objective is not to prove that our idea is correct.
+[Body Text] The objective is to discover reality.
+[Body Text] Every assumption must be supported by evidence before it becomes a product requirement.
+[Heading 1] Company Mission
+[First Paragraph] Build the world’s most trusted AI Operating Layer for Businesses.
+[Heading 1] Discovery Philosophy
+[First Paragraph] We do not build features.
+[Body Text] We solve validated business problems.
+[Body Text] Every feature must answer three questions.
+[Compact] What customer problem does this solve?
+[Compact] How frequently does the problem occur?
+[Compact] Why will someone pay for this solution?
+[Heading 1] Founder Success Metrics
+[First Paragraph] The research phase is successful if we discover:
+[Body Text] • Top 20 customer pain points.
+[Body Text] • Top 10 workflow bottlenecks.
+[Body Text] • Top 10 reasons customers reject existing AI products.
+[Body Text] • Top 20 feature gaps.
+[Body Text] • Top 10 measurable ROI opportunities.
+[Heading 1] Research Areas
+[Heading 2] Area 1 — Market Research
+[First Paragraph] Objective
+[Body Text] Understand the overall market.
+[Body Text] Questions
+[Compact] How large is the market?
+[Compact] Is the market growing?
+[Compact] Which industries adopt AI fastest?
+[Compact] Which industries spend the most on automation?
+[Compact] Which industries have the highest operational costs?
+[Compact] Which industries are underserved?
+[First Paragraph] Evidence
+[Body Text] Market reports
+[Body Text] Analyst reports
+[Body Text] Government reports
+[Body Text] Academic papers
+[Body Text] Success Criteria
+[Body Text] The market demonstrates sustained growth and clear business demand.
+[Heading 2] Area 2 — Customer Discovery
+[First Paragraph] Objective
+[Body Text] Understand real customer pain.
+[Body Text] Questions
+[Body Text] What is your role?
+[Body Text] How many employees?
+[Body Text] Which software do you currently use?
+[Body Text] What tasks consume the most time?
+[Body Text] What repetitive work frustrates your team?
+[Body Text] Which work is still manual?
+[Body Text] Where do employees waste time?
+[Body Text] How do employees search for information?
+[Body Text] How do customers contact support?
+[Body Text] Which questions are repeated every day?
+[Body Text] How much does support cost?
+[Body Text] How much time is spent onboarding new employees?
+[Body Text] Which reports are generated manually?
+[Body Text] Which approvals are repetitive?
+[Body Text] If you could automate one thing tomorrow, what would it be?
+[Body Text] What AI products have you tried?
+[Body Text] Why did they fail?
+[Body Text] Would you pay to solve this problem?
+[Body Text] How much would solving this save each month?
+[Body Text] Success Criteria
+[Body Text] Discover measurable operational pain.
+[Heading 2] Area 3 — Workflow Discovery
+[First Paragraph] Objective
+[Body Text] Understand work at the task level.
+[Body Text] For every role.
+[Body Text] Document
+[Body Text] Step 1
+[Body Text] Step 2
+[Body Text] Step 3
+[Body Text] Step 4
+[Body Text] Step 5
+[Body Text] Time Required
+[Body Text] Software Used
+[Body Text] Manual Decisions
+[Body Text] Repetitive Tasks
+[Body Text] AI Opportunity
+[Body Text] Workflow Candidates
+[Body Text] Customer Support Agent
+[Body Text] HR Executive
+[Body Text] Store Manager
+[Body Text] Operations Manager
+[Body Text] Finance Executive
+[Body Text] Warehouse Executive
+[Body Text] Sales Executive
+[Body Text] Recruiter
+[Body Text] Onboarding Specialist
+[Body Text] IT Administrator
+[Heading 2] Area 4 — Competitor Discovery
+[First Paragraph] Objective
+[Body Text] Understand where competitors fail.
+[Body Text] For every competitor document
+[Body Text] Company
+[Body Text] Target Industry
+[Body Text] Pricing
+[Body Text] AI Model
+[Body Text] Integrations
+[Body Text] Workflow Support
+[Body Text] Actions
+[Body Text] Security
+[Body Text] Analytics
+[Body Text] Deployment
+[Body Text] Missing Features
+[Body Text] Customer Complaints
+[Body Text] Ideal Customer
+[Body Text] Strengths
+[Body Text] Weaknesses
+[Body Text] Competitors
+[Body Text] Chatbase
+[Body Text] CustomGPT
+[Body Text] Dify
+[Body Text] Flowise
+[Body Text] AnythingLLM
+[Body Text] Intercom Fin
+[Body Text] Zendesk AI
+[Body Text] Microsoft Copilot
+[Body Text] Salesforce Agentforce
+[Body Text] ServiceNow
+[Body Text] Google Agentspace
+[Body Text] Oracle AI
+[Body Text] SAP Joule
+[Body Text] Zoho AI
+[Body Text] Freshworks AI
+[Heading 2] Area 5 — Customer Review Analysis
+[First Paragraph] Objective
+[Body Text] Learn from thousands of existing customers.
+[Body Text] Collect reviews from
+[Body Text] G2
+[Body Text] Capterra
+[Body Text] Reddit
+[Body Text] LinkedIn
+[Body Text] YouTube
+[Body Text] Product Hunt
+[Body Text] GitHub
+[Body Text] Review Fields
+[Body Text] Positive Feedback
+[Body Text] Negative Feedback
+[Body Text] Missing Features
+[Body Text] Pricing Complaints
+[Body Text] Performance Issues
+[Body Text] Integration Issues
+[Body Text] Security Issues
+[Body Text] Hallucination Issues
+[Body Text] Support Issues
+[Heading 2] Area 6 — ROI Discovery
+[First Paragraph] Objective
+[Body Text] Identify measurable business value.
+[Body Text] Questions
+[Body Text] How many employees perform this task?
+[Body Text] How many hours per week?
+[Body Text] Average salary?
+[Body Text] Annual cost?
+[Body Text] How much can AI reduce?
+[Body Text] Estimated savings?
+[Body Text] Implementation cost?
+[Body Text] Expected ROI?
+[Body Text] Payback period?
+[Heading 2] Area 7 — Technology Discovery
+[First Paragraph] Objective
+[Body Text] Understand what is technically possible.
+[Body Text] Research
+[Body Text] LLMs
+[Body Text] Embedding Models
+[Body Text] Vector Databases
+[Body Text] Knowledge Graphs
+[Body Text] RAG
+[Body Text] Agentic AI
+[Body Text] Workflow Engines
+[Body Text] MCP
+[Body Text] Tool Calling
+[Body Text] Identity
+[Body Text] RBAC
+[Body Text] Audit Logs
+[Body Text] Observability
+[Body Text] Evaluation Frameworks
+[Heading 2] Area 8 — Security Discovery
+[First Paragraph] Questions
+[Body Text] Where is sensitive data stored?
+[Body Text] Who can access it?
+[Body Text] Role permissions?
+[Body Text] Audit requirements?
+[Body Text] Compliance?
+[Body Text] Data retention?
+[Body Text] Encryption?
+[Body Text] PII?
+[Body Text] GDPR?
+[Body Text] SOC2?
+[Body Text] ISO 27001?
+[Heading 2] Area 9 — Business Model Discovery
+[First Paragraph] Questions
+[Body Text] Who pays?
+[Body Text] Who buys?
+[Body Text] Who approves?
+[Body Text] Who uses?
+[Body Text] Monthly budget?
+[Body Text] Implementation budget?
+[Body Text] Renewal decision?
+[Body Text] Sales cycle?
+[Body Text] Expected ROI?
+[Heading 2] Area 10 — Product Discovery
+[First Paragraph] Question
+[Body Text] What should Version 1 include?
+[Body Text] Every feature should contain
+[Body Text] Problem
+[Body Text] Current Solution
+[Body Text] Pain Level (1–10)
+[Body Text] Frequency
+[Body Text] ROI
+[Body Text] Complexity
+[Body Text] Competitive Advantage
+[Body Text] Priority
+[Heading 1] Interview Scorecard
+[First Paragraph] Every interview should conclude with:
+[Body Text] Problem Severity (1–10)
+[Body Text] Frequency
+[Body Text] Current Solution
+[Body Text] Money Lost
+[Body Text] Time Lost
+[Body Text] Urgency
+[Body Text] Buying Interest
+[Body Text] Integration Need
+[Body Text] Automation Need
+[Body Text] Trust Requirement
+[Body Text] Overall Opportunity Score
+[Heading 1] Evidence Tracking
+[First Paragraph] Every discovery should include an evidence source.
+[Body Text] H — Hypothesis
+[Body Text] MR — Market Research
+[Body Text] CI — Customer Interview
+[Body Text] CR — Customer Review
+[Body Text] CP — Competitor Product
+[Body Text] P — Pilot Customer
+[Body Text] D — Production Data
+[Body Text] No important product decision should rely solely on hypotheses.
+[Heading 1] Exit Criteria
+[First Paragraph] The company proceeds to PRD creation only if:
+[Normal] The top ten customer pain points are consistently validated.
+[Normal] At least five design partners agree to evaluate the MVP.
+[Normal] A clear product differentiation exists.
+[Normal] Customers can quantify ROI.
+[Normal] Customers express willingness to pay.
+[Normal] The founding team identifies a defendable market position.
+[Normal] The product vision is supported by evidence rather than assumptions.
