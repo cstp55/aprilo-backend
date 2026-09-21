@@ -4,22 +4,22 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Aprilo AI Admin')</title>
-    <!-- Import premium typography -->
+    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    
     <style>
         :root {
             --paper: #f8fafc;
             --surface: #ffffff;
-            --ink: #111827;
-            --muted: #4b5563;
+            --ink: #0f172a;
+            --muted: #64748b;
             --line: #e2e8f0;
-            --green: #2563eb;
-            --green-dark: #1d4ed8;
-            --secondary: #10b981;
-            --amber: #7c3aed;
-            --danger: #ef4444;
+            --green: #4f46e5; /* indigo-650 / primary */
+            --green-dark: #3730a3;
+            --amber: #d97706;
+            --danger: #dc2626;
         }
 
         * { box-sizing: border-box; }
@@ -27,10 +27,10 @@
             margin: 0;
             background: var(--paper);
             color: var(--ink);
-            font-family: 'Outfit', sans-serif;
+            font-family: 'Inter', sans-serif;
         }
         a { color: inherit; text-decoration: none; }
-        button, input, select {
+        button, input, select, textarea {
             font: inherit;
         }
         .shell {
@@ -41,75 +41,129 @@
         .sidebar {
             background: var(--surface);
             border-right: 1px solid var(--line);
-            padding: 22px;
+            padding: 24px;
             position: sticky;
             top: 0;
             height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
             overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 transparent;
+        }
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .brand-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         .brand-mark {
-            width: 38px;
-            height: 38px;
-            border-radius: 6px;
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: var(--green);
+            background: linear-gradient(135deg, var(--green), #6366f1);
             color: #fff;
-            font-weight: 700;
+            font-weight: 800;
+            font-size: 20px;
+            font-family: 'Outfit', sans-serif;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
         }
         .brand-title {
-            margin-top: 14px;
-            font-size: 20px;
-            font-weight: 700;
+            font-family: 'Outfit', sans-serif;
+            font-size: 18px;
+            font-weight: 800;
+            margin: 0;
+            color: var(--ink);
         }
         .brand-subtitle {
-            margin-top: 4px;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 10px;
             letter-spacing: .16em;
             text-transform: uppercase;
+            font-weight: 700;
+            margin-top: 2px;
         }
         .nav {
-            margin-top: 24px;
-            display: grid;
+            margin-top: 36px;
+            display: flex;
+            flex-direction: column;
             gap: 6px;
+            flex-grow: 1;
         }
         .nav a {
-            border-radius: 6px;
-            padding: 8px 10px;
-            color: #34413c;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #475569;
             font-size: 13.5px;
             font-weight: 600;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .nav a.active,
-        .nav a:hover {
+        .nav a.active {
             background: var(--green);
             color: #fff;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+        }
+        .nav a:hover:not(.active) {
+            background: #f1f5f9;
+            color: var(--ink);
+            transform: translateX(4px);
         }
         .logout {
-            position: static;
-            margin-top: 24px;
-            padding-bottom: 24px;
+            margin-top: auto;
+            border-top: 1px solid var(--line);
+            padding-top: 16px;
         }
         .logout button,
         .button {
             width: 100%;
             border: 0;
-            border-radius: 6px;
+            border-radius: 8px;
             background: var(--green);
             color: #fff;
-            padding: 10px 14px;
+            padding: 11px 16px;
             font-weight: 700;
+            font-size: 13.5px;
             cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);
+        }
+        .logout button:hover,
+        .button:hover {
+            background: var(--green-dark);
+            transform: translateY(-1px);
         }
         .logout button {
             background: transparent;
             border: 1px solid var(--line);
-            color: #34413c;
+            color: #475569;
+            box-shadow: none;
+        }
+        .logout button:hover {
+            background: #f8fafc;
+            color: var(--ink);
+            border-color: #cbd5e1;
         }
         .main {
-            padding: 28px;
+            padding: 32px;
             overflow-y: auto;
         }
         .header {
@@ -117,68 +171,80 @@
             align-items: flex-start;
             justify-content: space-between;
             gap: 18px;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
         .eyebrow {
             color: var(--amber);
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             letter-spacing: .16em;
             text-transform: uppercase;
         }
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Outfit', sans-serif;
+            margin: 0;
+        }
         h1 {
-            margin: 8px 0 0;
-            font-size: 30px;
+            margin-top: 8px;
+            font-size: 32px;
             line-height: 1.15;
+            font-weight: 800;
         }
         .help {
             margin-top: 8px;
             max-width: 680px;
             color: var(--muted);
-            font-size: 14px;
+            font-size: 14.5px;
             line-height: 1.7;
         }
         .grid {
             display: grid;
-            gap: 16px;
+            gap: 20px;
         }
         .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
         .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .card {
             background: var(--surface);
             border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 18px;
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }
         .metric {
-            font-size: 30px;
-            font-weight: 700;
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'Outfit', sans-serif;
+            color: var(--green);
         }
         .label {
             margin-top: 6px;
             color: var(--muted);
             font-size: 13px;
+            font-weight: 600;
         }
         table {
             width: 100%;
             border-collapse: collapse;
             background: var(--surface);
             border: 1px solid var(--line);
-            border-radius: 8px;
+            border-radius: 10px;
             overflow: hidden;
         }
         th, td {
-            border-bottom: 1px solid #e7e1d7;
-            padding: 12px;
+            border-bottom: 1px solid #f1f5f9;
+            padding: 14px 16px;
             text-align: left;
-            vertical-align: top;
+            vertical-align: middle;
             font-size: 14px;
         }
         th {
-            background: #ece8df;
-            font-size: 12px;
+            background: #f8fafc;
+            font-size: 11px;
+            font-weight: 700;
             letter-spacing: .08em;
             text-transform: uppercase;
+            color: var(--muted);
         }
         tr:last-child td { border-bottom: 0; }
         .field {
@@ -188,41 +254,49 @@
             font-weight: 700;
         }
         .field input,
-        .field select {
+        .field select,
+        .field textarea {
             width: 100%;
-            border: 1px solid #cfc7b8;
-            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
             background: #fff;
-            padding: 10px;
+            padding: 10px 12px;
             color: var(--ink);
             outline: none;
+            transition: all 0.2s ease;
         }
         .field input:focus,
-        .field select:focus {
+        .field select:focus,
+        .field textarea:focus {
             border-color: var(--green);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
         .notice {
-            border-radius: 6px;
-            margin-bottom: 18px;
-            padding: 12px 14px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            padding: 14px 16px;
             font-size: 14px;
-            background: #e8f5ee;
-            color: var(--green);
+            background: #ecfdf5;
+            color: #047857;
+            border: 1px solid #a7f3d0;
+            font-weight: 600;
         }
         .error {
-            border-radius: 6px;
-            margin-bottom: 18px;
-            padding: 12px 14px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            padding: 14px 16px;
             font-size: 14px;
-            background: #fff1f0;
-            color: var(--danger);
+            background: #fef2f2;
+            color: #b91c1c;
+            border: 1px solid #fecaca;
+            font-weight: 600;
         }
         .pill {
             display: inline-flex;
             border-radius: 999px;
-            background: #eef1ea;
-            padding: 5px 10px;
-            color: #34413c;
+            background: #f1f5f9;
+            padding: 4px 10px;
+            color: #475569;
             font-size: 12px;
             font-weight: 700;
         }
@@ -238,43 +312,55 @@
                 height: auto;
             }
             .logout { position: static; margin-top: 24px; }
-            .grid-4, .grid-2 { grid-template-columns: 1fr; }
+            .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
     <div class="shell">
         <aside class="sidebar">
-            <div class="brand-mark">A</div>
-            <div class="brand-title">Aprilo AI</div>
-            <div class="brand-subtitle">Admin console</div>
-            <nav class="nav">
-                <a class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">📊 Dashboard</a>
-                <a class="{{ request()->routeIs('admin.escalations') ? 'active' : '' }}" href="{{ route('admin.escalations') }}">⚠️ Escalations</a>
+            <div>
+                <div class="brand-section">
+                    <div class="brand-mark">A</div>
+                    <div>
+                        <div class="brand-title">Aprilo AI</div>
+                        <div class="brand-subtitle">Admin console</div>
+                    </div>
+                </div>
                 
-                <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">HR Operations</div>
-                <a class="{{ request()->routeIs('admin.leaves') ? 'active' : '' }}" href="{{ route('admin.leaves') }}">📅 Leave Requests</a>
-                <a class="{{ request()->routeIs('admin.wfh') ? 'active' : '' }}" href="{{ route('admin.wfh') }}">🏠 WFH Requests</a>
-                <a class="{{ request()->routeIs('admin.employees') ? 'active' : '' }}" href="{{ route('admin.employees') }}">🔍 Validate Employee</a>
-                <a class="{{ request()->routeIs('admin.idcards') ? 'active' : '' }}" href="{{ route('admin.idcards') }}">🪪 ID Cards</a>
+                <nav class="nav">
+                    @if (auth()->check())
+                        <div style="padding: 10px 12px; margin-bottom: 12px; background: rgba(79, 70, 229, 0.06); border-radius: 8px; border: 1px solid rgba(79, 70, 229, 0.15);">
+                            <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--green); letter-spacing: 0.08em;">Active Role</div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--ink); margin-top: 2px;">
+                                {{ auth()->user()->roleModel->name ?? ucfirst(str_replace('_', ' ', auth()->user()->role_slug)) }}
+                            </div>
+                            <div style="font-size: 11px; color: var(--muted); margin-top: 1px;">
+                                {{ auth()->user()->organization->name ?? 'Platform Global' }}
+                            </div>
+                        </div>
+                    @endif
 
-                <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">Assistant Settings</div>
-                <a class="{{ request()->routeIs('admin.settings.agent') ? 'active' : '' }}" href="{{ route('admin.settings.agent') }}">🤖 Agent Settings</a>
-                <a class="{{ request()->routeIs('admin.settings.design') ? 'active' : '' }}" href="{{ route('admin.settings.design') }}">🎨 Widget Design</a>
-                <a class="{{ request()->routeIs('admin.settings.connect') || request()->routeIs('admin.settings.connect.*') ? 'active' : '' }}" href="{{ route('admin.settings.connect') }}">🔌 Connect Channels</a>
-                <a class="{{ request()->routeIs('admin.sources') ? 'active' : '' }}" href="{{ route('admin.sources') }}">📚 Knowledge Base</a>
-                <a class="{{ request()->routeIs('admin.settings.deploy') ? 'active' : '' }}" href="{{ route('admin.settings.deploy') }}">🌐 Deploy Script</a>
-                <a class="{{ request()->routeIs('admin.settings.pricing') ? 'active' : '' }}" href="{{ route('admin.settings.pricing') }}">💳 Plans & Pricing</a>
-                <a class="{{ request()->routeIs('admin.logs') ? 'active' : '' }}" href="{{ route('admin.logs') }}">📝 Interaction Logs</a>
-
-                @if (auth()->user() && auth()->user()->organization->name === 'Demo Company' && auth()->user()->role === 'owner')
-                    <div style="margin: 12px 0 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);">Platform Admin</div>
-                    <a class="{{ request()->routeIs('admin.super') ? 'active' : '' }}" href="{{ route('admin.super') }}">👑 Super Admin Panel</a>
-                @endif
-            </nav>
+                    @forelse ($sidebarMenu ?? [] as $group)
+                        <div style="margin: 18px 0 6px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);">
+                            {{ $group['header'] }}
+                        </div>
+                        @foreach ($group['items'] as $item)
+                            @php
+                                $url = isset($item['route']) ? (Route::has($item['route']) ? route($item['route'], $item['params'] ?? []) : '#') : '#';
+                            @endphp
+                            <a class="{{ $item['active'] ? 'active' : '' }}" href="{{ $url }}">
+                                {{ $item['title'] }}
+                            </a>
+                        @endforeach
+                    @empty
+                        <a class="{{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" href="{{ route('admin.dashboard') }}">Dashboard</a>
+                    @endforelse
+                </nav>
+            </div>
             <form class="logout" method="POST" action="{{ route('admin.logout') }}">
                 @csrf
-                <button type="submit" style="margin-top: 20px;">Sign out</button>
+                <button type="submit">Sign out</button>
             </form>
         </aside>
         <main class="main">

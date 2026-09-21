@@ -195,4 +195,57 @@ class QuestionController extends Controller
             'question' => $question->load(['answers.sources', 'escalation']),
         ]);
     }
+
+    public function escalationCheck(Request $request): JsonResponse
+    {
+        $sessionId = $request->query('session_id');
+        
+        $escalation = Escalation::query()
+            ->where('status', 'open')
+            ->where(function($query) use ($sessionId) {
+                $query->where('resolution_note', 'like', "%{$sessionId}%")
+                      ->orWhere('question_id', $sessionId);
+            })
+            ->first();
+
+        if ($escalation) {
+            $priority = 'standard';
+            if ($escalation->assignee) {
+                $priority = $escalation->assignee->escalation_priority ?? 'standard';
+            }
+            return response()->json([
+                'escalated' => true,
+                'priority' => $priority,
+            ]);
+        }
+
+        return response()->json([
+            'escalated' => false,
+            'priority' => 'standard',
+        ]);
+    }
+
+    public function validateEmployeeById(Request $request): JsonResponse
+    {
+        $employeeId = $request->query('employee_id');
+        
+        $employee = \App\Models\User::query()
+            ->where('employee_id', $employeeId)
+            ->first();
+
+        if ($employee) {
+            return response()->json([
+                'valid' => true,
+                'employee' => [
+                    'name' => $employee->name,
+                    'role' => $employee->role === 'employee' ? 'Staff Member' : 'HR Administrator',
+                ]
+            ]);
+        }
+
+        return response()->json([
+            'valid' => false,
+        ]);
+    }
 }
+

@@ -30,11 +30,42 @@ class AdminConsoleController extends Controller
             [
                 'minutes_saved_per_resolved_question' => 5,
                 'assistant_status' => 'active',
-                'assistant_name' => 'Aprilo Bot',
+                'assistant_name' => 'Sarah (AI Agent)',
             ]
         );
 
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
+
+        $sources = KnowledgeSource::query()
+            ->withCount('chunks')
+            ->where('organization_id', $organization->id)
+            ->latest()
+            ->get();
+
+        $escalations = Escalation::where('organization_id', $organization->id)->latest()->get();
+
+        $leaves = \App\Models\LeaveRequest::query()
+            ->where('organization_id', $organization->id)
+            ->with('user')
+            ->latest()
+            ->get();
+
+        $wfhRequests = \App\Models\WfhRequest::query()
+            ->where('organization_id', $organization->id)
+            ->with('user')
+            ->latest()
+            ->get();
+
+        $employees = \App\Models\User::query()
+            ->where('organization_id', $organization->id)
+            ->get();
+
+        $idcards = \App\Models\IdCard::query()
+            ->whereHas('user', function ($q) use ($organization) {
+                $q->where('organization_id', $organization->id);
+            })
+            ->with('user')
+            ->get();
 
         return view('admin.dashboard', [
             'summary' => $metrics->summary($organization),
@@ -47,6 +78,12 @@ class AdminConsoleController extends Controller
             'settings' => $settings,
             'organization' => $organization,
             'invoices' => $invoices,
+            'sources' => $sources,
+            'escalations' => $escalations,
+            'leaves' => $leaves,
+            'wfhRequests' => $wfhRequests,
+            'employees' => $employees,
+            'idcards' => $idcards,
         ]);
     }
 
@@ -885,9 +922,10 @@ class AdminConsoleController extends Controller
 
     private function authorizeAdmin(Request $request): void
     {
+        $user = $request->user();
+
         abort_unless(
-            $request->user()
-            && in_array($request->user()->role, [UserRole::Owner->value, UserRole::HrAdmin->value], true),
+            $user && ($user->isSuperAdmin() || $user->isHrAdmin() || $user->isEcommerceAdmin() || $user->hasPermission('dashboard.view')),
             403,
             'Admin access is required.'
         );

@@ -48,7 +48,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
         // 1. Save with Sandbox turned on
         $this->post(route('admin.settings.connect.update', 'whatsapp'), [
             'whatsapp_use_sandbox' => '1',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings = OrganizationSetting::where('organization_id', $this->organization->id)->firstOrFail();
         $this->assertTrue($settings->whatsapp_use_sandbox);
@@ -64,7 +64,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
             'whatsapp_message_template' => 'custom_escalation_alert',
             'whatsapp_access_token' => 'EAAGy123_token',
             'request_approval' => '1',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings->refresh();
         $this->assertFalse($settings->whatsapp_use_sandbox);
@@ -84,7 +84,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
         $this->post(route('admin.settings.connect.update', 'teams'), [
             'teams_use_webhook' => '1',
             'teams_webhook_url' => 'https://company.webhook.office.com/webhookb2/teams_test',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings = OrganizationSetting::where('organization_id', $this->organization->id)->firstOrFail();
         $this->assertTrue($settings->teams_use_webhook);
@@ -97,7 +97,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
             'teams_tenant_id' => '3a1f9a2b-tenant-uuid',
             'teams_app_id' => '5b2e8a1c-app-uuid',
             'teams_app_password' => 'super_secret_password',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings->refresh();
         $this->assertFalse($settings->teams_use_webhook);
@@ -119,7 +119,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
             'mail_smtp_password' => 'secret_smtp_pass',
             'mail_smtp_encryption' => 'ssl',
             'hr_desk_email' => 'help@custom.io',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings = OrganizationSetting::where('organization_id', $this->organization->id)->firstOrFail();
         $this->assertTrue($settings->mail_connected);
@@ -146,7 +146,7 @@ class SprintFourConnectIntegrationsTest extends TestCase
         // Disconnect
         $this->post(route('admin.settings.connect.update', 'whatsapp'), [
             'disconnect' => '1',
-        ])->assertRedirect(route('admin.settings', ['tab' => 'connect']));
+        ])->assertRedirect(route('admin.settings.connect'));
 
         $settings->refresh();
         $this->assertFalse($settings->whatsapp_connected);

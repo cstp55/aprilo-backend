@@ -21,6 +21,38 @@ Route::post('/widget/inbound-email', [\App\Http\Controllers\Api\WidgetChatContro
 
 Route::post('/teams/messages', [\App\Http\Controllers\Api\TeamsBotController::class, 'handleMessage']);
 
+Route::get('/question/escalation-check', [\App\Http\Controllers\Api\QuestionController::class, 'escalationCheck']);
+Route::get('/employee/validate', [\App\Http\Controllers\Api\QuestionController::class, 'validateEmployeeById']);
+
+// E-commerce Plugin License Validation
+Route::post('/ecommerce/license/validate', function (\Illuminate\Http\Request $request) {
+    $validated = $request->validate([
+        'license_key' => ['required', 'string'],
+        'domain' => ['nullable', 'string'],
+        'platform' => ['nullable', 'string'],
+    ]);
+
+    $license = \App\Models\EcommerceLicense::where('license_key', $validated['license_key'])->first();
+
+    if (! $license) {
+        return response()->json(['valid' => false, 'message' => 'Invalid license key.'], 404);
+    }
+
+    $domain = $validated['domain'] ?? '';
+    if (! $license->isValidForDomain($domain)) {
+        return response()->json(['valid' => false, 'message' => 'License is inactive, expired, or domain mismatch.'], 403);
+    }
+
+    return response()->json([
+        'valid' => true,
+        'license_key' => $license->license_key,
+        'platform' => $license->platform,
+        'status' => $license->status,
+        'organization' => $license->organization->name ?? 'Aprilo Client',
+        'expires_at' => $license->expires_at?->toIso8601String(),
+    ]);
+});
+
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/questions', [QuestionController::class, 'store']);
     Route::get('/questions/{question}', [QuestionController::class, 'show']);

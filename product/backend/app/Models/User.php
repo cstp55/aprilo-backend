@@ -16,12 +16,14 @@ use Laravel\Sanctum\HasApiTokens;
 
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'name', 'email', 'password', 'role', 'status', 'employee_id', 'teams_user_id', 'teams_conversation_id', 'teams_service_url', 'escalation_priority', 'escalation_routing_active'])]
+use App\Traits\HasPermissions;
+
+#[Fillable(['organization_id', 'role_id', 'name', 'email', 'password', 'role', 'status', 'employee_id', 'teams_user_id', 'teams_conversation_id', 'teams_service_url', 'escalation_priority', 'escalation_routing_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasUuids, Notifiable;
+    use HasApiTokens, HasFactory, HasPermissions, HasUuids, Notifiable;
 
     public function organization(): BelongsTo
     {

@@ -19,6 +19,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->call(RolesAndPermissionsSeeder::class);
+
         $organization = Organization::firstOrCreate(
             ['name' => 'Demo Company'],
             ['status' => 'active', 'plan' => 'enterprise']
