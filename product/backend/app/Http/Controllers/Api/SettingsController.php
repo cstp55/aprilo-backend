@@ -31,6 +31,8 @@ class SettingsController extends Controller
         $this->authorizeAdmin($request);
 
         $validated = $request->validate([
+            'live_chat_enabled' => ['sometimes', 'boolean'],
+            'max_support_agents' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10000'],
             'minutes_saved_per_resolved_question' => ['sometimes', 'integer', 'min:1', 'max:60'],
             'assistant_status' => ['sometimes', Rule::in(['active', 'paused'])],
             'default_escalation_owner' => ['sometimes', 'nullable', 'uuid'],

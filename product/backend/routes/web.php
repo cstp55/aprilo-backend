@@ -15,6 +15,8 @@ Route::get('/login', function () {
     return redirect()->route('admin.login');
 })->name('login');
 
+Route::get('/admin/sso', [\App\Http\Controllers\Admin\SsoController::class, 'authenticate'])->name('admin.sso');
+
 Route::prefix('admin')->name('admin.')->group(function (): void {
     Route::get('/login', [AdminAuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AdminAuthController::class, 'login'])->name('login.submit');

@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\SettingsController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/register', [AuthController::class, 'register']);
+Route::post('/auth/agent-login', [AuthController::class, 'agentLogin']);
 Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
 Route::post('/auth/validate-employee', [AuthController::class, 'validateEmployee'])->middleware('auth:sanctum');
@@ -57,6 +59,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/questions', [QuestionController::class, 'store']);
     Route::get('/questions/{question}', [QuestionController::class, 'show']);
     Route::post('/answers/{answer}/feedback', [FeedbackController::class, 'store']);
+    Route::get('/agents', [\App\Http\Controllers\Api\AgentSupportController::class, 'index']);
+    Route::post('/agents', [\App\Http\Controllers\Api\AgentSupportController::class, 'store']);
+    Route::patch('/agents/{agentSupport}', [\App\Http\Controllers\Api\AgentSupportController::class, 'update']);
+    Route::delete('/agents/{agentSupport}', [\App\Http\Controllers\Api\AgentSupportController::class, 'destroy']);
 
     Route::prefix('admin')->group(function (): void {
         Route::get('/sources', [KnowledgeSourceController::class, 'index']);
@@ -74,3 +80,14 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::patch('/settings', [SettingsController::class, 'update']);
     });
 });
+
+// Customer & Organization Onboarding API
+Route::prefix('onboarding')->group(function (): void {
+    Route::get('/catalog', [\App\Http\Controllers\Api\OnboardingController::class, 'catalog']);
+    Route::post('/check-username', [\App\Http\Controllers\Api\OnboardingController::class, 'checkUsername']);
+    Route::post('/initiate', [\App\Http\Controllers\Api\OnboardingController::class, 'initiate']);
+    Route::post('/verify', [\App\Http\Controllers\Api\OnboardingController::class, 'verify']);
+});
+
+// Razorpay Webhooks
+Route::post('/webhooks/razorpay', [\App\Http\Controllers\Api\RazorpayWebhookController::class, 'handle']);

@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 use App\Traits\HasPermissions;
 
-#[Fillable(['organization_id', 'role_id', 'name', 'email', 'password', 'role', 'status', 'employee_id', 'teams_user_id', 'teams_conversation_id', 'teams_service_url', 'escalation_priority', 'escalation_routing_active'])]
+#[Fillable(['organization_id', 'role_id', 'name', 'username', 'email', 'phone', 'password', 'role', 'status', 'employee_id', 'teams_user_id', 'teams_conversation_id', 'teams_service_url', 'escalation_priority', 'escalation_routing_active'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -53,6 +53,11 @@ class User extends Authenticatable
     public function idCard(): HasOne
     {
         return $this->hasOne(IdCard::class);
+    }
+
+    public function agentSupport(): HasOne
+    {
+        return $this->hasOne(AgentSupport::class);
     }
 
     /**

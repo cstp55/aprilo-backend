@@ -28,6 +28,12 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+        'razorpay' => [
+        'key_id' => env('RAZORPAY_KEY_ID', 'rzp_test_aprilo_mock_key'),
+        'key_secret' => env('RAZORPAY_KEY_SECRET', 'aprilo_mock_secret_key_2026'),
+        'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET', 'aprilo_webhook_secret_2026'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

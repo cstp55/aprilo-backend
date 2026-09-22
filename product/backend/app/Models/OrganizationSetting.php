@@ -12,6 +12,8 @@ class OrganizationSetting extends Model
 
     protected $fillable = [
         'organization_id',
+        'live_chat_enabled',
+        'max_support_agents',
         'minutes_saved_per_resolved_question',
         'default_escalation_owner',
         'assistant_status',
@@ -84,6 +86,8 @@ class OrganizationSetting extends Model
     protected function casts(): array
     {
         return [
+            'live_chat_enabled' => 'boolean',
+            'max_support_agents' => 'integer',
             'chatbot_escalation_enabled' => 'boolean',
             'connect_teams' => 'boolean',
             'connect_skype' => 'boolean',

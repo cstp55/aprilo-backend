@@ -5,36 +5,27 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Product extends Model
+class Plan extends Model
 {
     use HasFactory, HasUuids;
 
-    protected $table = 'products';
+    protected $table = 'plans';
 
     protected $fillable = [
+        'product_id',
         'slug',
         'name',
-        'category',
-        'product_type',
-        'platform',
-        'short_description',
-        'description',
-        'icon',
-        'image',
+        'billing_cycle',
         'price',
         'currency',
-        'version',
-        'compatibility',
+        'trial_period_days',
+        'request_limit',
+        'razorpay_plan_id',
         'features',
-        'documentation_url',
-        'changelog_url',
-        'download_type',
-        'license_type',
-        'status',
-        'featured',
-        'best_seller',
+        'is_popular',
         'is_active',
         'sort_order',
         'metadata',
@@ -44,19 +35,20 @@ class Product extends Model
     {
         return [
             'price' => 'decimal:2',
+            'trial_period_days' => 'integer',
+            'request_limit' => 'integer',
             'features' => 'array',
             'metadata' => 'array',
-            'featured' => 'boolean',
-            'best_seller' => 'boolean',
+            'is_popular' => 'boolean',
             'is_active' => 'boolean',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
         ];
     }
 
-    public function plans(): HasMany
+    public function product(): BelongsTo
     {
-        return $this->hasMany(Plan::class)->orderBy('sort_order', 'asc');
+        return $this->belongsTo(Product::class);
     }
 
     public function subscriptions(): HasMany
