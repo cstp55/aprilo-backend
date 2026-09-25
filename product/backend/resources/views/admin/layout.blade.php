@@ -11,14 +11,22 @@
     
     <style>
         :root {
-            --paper: #f8fafc;
-            --surface: #ffffff;
-            --ink: #0f172a;
-            --muted: #64748b;
-            --line: #e2e8f0;
-            --green: #4f46e5; /* indigo-650 / primary */
-            --green-dark: #3730a3;
-            --amber: #d97706;
+            --aprilo-green: #22C55E;
+            --aprilo-green-dark: #16A34A;
+            --aprilo-green-deep: #065F46;
+            --agent-orange: #FF8A00;
+            --agent-orange-light: #FFB020;
+            --agent-orange-soft: #FFC95A;
+            --text-primary: #1F2937;
+            --text-secondary: #6B7280;
+            --surface: #FFFFFF;
+            --paper: #F8FAFC;
+            --line: #E5E7EB;
+            --ink: var(--text-primary);
+            --muted: var(--text-secondary);
+            --green: var(--aprilo-green);
+            --green-dark: var(--aprilo-green-dark);
+            --amber: var(--agent-orange);
             --danger: #dc2626;
         }
 
@@ -77,12 +85,12 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--green), #6366f1);
+            background: linear-gradient(135deg, var(--aprilo-green), var(--aprilo-green-deep));
             color: #fff;
             font-weight: 800;
             font-size: 20px;
             font-family: 'Outfit', sans-serif;
-            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.2);
+            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2);
         }
         .brand-title {
             font-family: 'Outfit', sans-serif;
@@ -120,7 +128,7 @@
         .nav a.active {
             background: var(--green);
             color: #fff;
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15);
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
         }
         .nav a:hover:not(.active) {
             background: #f1f5f9;
@@ -144,7 +152,7 @@
             font-size: 13.5px;
             cursor: pointer;
             transition: all 0.2s ease;
-            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);
+            box-shadow: 0 4px 10px rgba(34, 197, 94, 0.15);
         }
         .logout button:hover,
         .button:hover {
@@ -315,13 +323,14 @@
             .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
         }
     </style>
+    <link rel="icon" type="image/x-icon" href="{{ asset('logo.png') }}">
 </head>
 <body>
     <div class="shell">
         <aside class="sidebar">
             <div>
                 <div class="brand-section">
-                    <div class="brand-mark">A</div>
+                    <div class="brand-mark"><img src="{{ asset('logo.png') }}" alt="Aprilo AI Logo"></div>
                     <div>
                         <div class="brand-title">Aprilo AI</div>
                         <div class="brand-subtitle">Admin console</div>

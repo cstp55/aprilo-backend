@@ -10,14 +10,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --color-red-500: lab(55.4814% 75.0732 48.8528);
-            --color-red-600: lab(48.4493% 77.4328 61.5452);
-            --bg-gradient-start: #12141c;
-            --bg-gradient-end: #1a1e2d;
-            --card-bg: rgba(255, 255, 255, 0.03);
-            --card-border: rgba(255, 255, 255, 0.08);
-            --text-primary: #f3f4f6;
-            --text-secondary: #9ca3af;
+            --aprilo-green: #22C55E;
+            --aprilo-green-dark: #16A34A;
+            --aprilo-green-deep: #065F46;
+            --agent-orange: #FF8A00;
+            --agent-orange-light: #FFB020;
+            --agent-orange-soft: #FFC95A;
+            --text-primary: #1F2937;
+            --text-secondary: #6B7280;
+            --surface: #FFFFFF;
+            --background: #F8FAFC;
+            --border: #E5E7EB;
         }
         
         * {
@@ -31,9 +34,9 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: radial-gradient(circle at top right, #2d1822, transparent 40%),
-                        radial-gradient(circle at bottom left, #121d25, transparent 40%),
-                        linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end));
+            background: radial-gradient(circle at top right, rgba(255, 201, 90, 0.22), transparent 38%),
+                        radial-gradient(circle at bottom left, rgba(34, 197, 94, 0.14), transparent 42%),
+                        var(--background);
             color: var(--text-primary);
             font-family: 'Plus Jakarta Sans', sans-serif;
             padding: 24px;
@@ -42,14 +45,11 @@
 
         .login-container {
             width: min(440px, 100%);
-            border: 1px solid var(--card-border);
+            border: 1px solid var(--border);
             border-radius: 20px;
-            background: rgba(26, 30, 45, 0.6);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
+            background: rgba(255, 255, 255, 0.92);
             padding: 40px;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(6, 95, 70, 0.16);
             animation: fadeIn 0.6s ease-out;
         }
 
@@ -70,17 +70,17 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, var(--color-red-500), var(--color-red-600));
+            background: linear-gradient(135deg, var(--aprilo-green), var(--aprilo-green-deep));
             color: #ffffff;
             font-family: 'Outfit', sans-serif;
             font-size: 22px;
             font-weight: 700;
-            box-shadow: 0 8px 24px rgba(227, 38, 38, 0.25);
+            box-shadow: 0 8px 24px rgba(34, 197, 94, 0.25);
             margin-bottom: 16px;
         }
 
         .eyebrow {
-            color: var(--color-red-500);
+            color: var(--agent-orange);
             font-size: 11px;
             font-weight: 700;
             letter-spacing: .2em;
@@ -94,7 +94,8 @@
             font-weight: 600;
             letter-spacing: -0.02em;
             margin-bottom: 8px;
-            background: linear-gradient(to right, #ffffff, #e5e7eb);
+            background: linear-gradient(to right, var(--aprilo-green-deep), var(--aprilo-green));
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -115,25 +116,25 @@
         label {
             font-size: 13px;
             font-weight: 600;
-            color: #d1d5db;
+            color: var(--text-primary);
         }
 
         input {
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid var(--border);
             border-radius: 10px;
-            background: rgba(0, 0, 0, 0.2);
+            background: var(--surface);
             padding: 13px 16px;
             font-family: inherit;
             font-size: 14px;
-            color: #ffffff;
+            color: var(--text-primary);
             outline: none;
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         input:focus {
-            border-color: var(--color-red-500);
-            box-shadow: 0 0 0 3px rgba(227, 38, 38, 0.15);
-            background: rgba(0, 0, 0, 0.3);
+            border-color: var(--aprilo-green);
+            box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15);
+            background: var(--surface);
         }
 
         button {
@@ -141,21 +142,21 @@
             margin-top: 12px;
             border: 0;
             border-radius: 10px;
-            background: var(--color-red-500);
+            background: var(--aprilo-green-dark);
             color: #ffffff;
             padding: 14px;
             font-family: inherit;
             font-size: 15px;
             font-weight: 600;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(227, 38, 38, 0.2);
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.2);
             transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         button:hover {
-            background: var(--color-red-600);
+            background: var(--aprilo-green-deep);
             transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(227, 38, 38, 0.3);
+            box-shadow: 0 6px 20px rgba(6, 95, 70, 0.3);
         }
 
         button:active {
@@ -179,8 +180,8 @@
         <form method="POST" action="{{ route('admin.login.submit') }}">
             @csrf
             <div class="header-wrapper">
-                <div class="logo-box">A</div>
-                <div class="eyebrow">Aprilo AI</div>
+                <div class="logo-box"><img src="{{ asset('logo.png') }}" alt="Aprilo AI Logo" width="50px" height="50px"></div>
+                <div class="eyebrow">Aprilo Infotech</div>
                 <h1>Admin console</h1>
                 <p class="subtitle">Enter your credentials to manage resources, settings, and employee workflows.</p>
             </div>
