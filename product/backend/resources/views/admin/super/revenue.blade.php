@@ -37,7 +37,7 @@
                 <tr>
                     <td><strong>{{ $inv->invoice_number }}</strong></td>
                     <td>{{ $inv->organization->name ?? 'Unknown' }}</td>
-                    <td style="font-weight: 700;">${{ number_format($inv->amount_cents / 100, 2) }}</td>
+                    <td style="font-weight: 700;">${{ number_format((float) $inv->amount, 2) }}</td>
                     <td>
                         <span class="pill" style="{{ $inv->status === 'paid' ? 'background: rgba(16, 185, 129, 0.15); color: #059669;' : 'background: rgba(245, 158, 11, 0.15); color: #d97706;' }} font-size: 11px; text-transform: uppercase;">
                             {{ $inv->status }}

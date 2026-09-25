@@ -336,9 +336,24 @@
                                 {{ auth()->user()->roleModel->name ?? ucfirst(str_replace('_', ' ', auth()->user()->role_slug)) }}
                             </div>
                             <div style="font-size: 11px; color: var(--muted); margin-top: 1px;">
-                                {{ auth()->user()->organization->name ?? 'Platform Global' }}
+                                {{ auth()->user()->organization?->name ?? 'Platform Global' }}
                             </div>
                         </div>
+                    @endif
+
+                    @if (auth()->user()->isSuperAdmin())
+                        <div style="margin: 14px 0 6px 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted);">Support Management</div>
+                        <div style="display: grid; gap: 6px;">
+                            @foreach (\App\Models\Organization::orderBy('name')->get(['id', 'name']) as $organizationOption)
+                                <a class="{{ request()->routeIs('admin.agents*') && request('organization_id') === $organizationOption->id ? 'active' : '' }}" href="{{ route('admin.agents', ['organization_id' => $organizationOption->id]) }}">
+                                    Agents · {{ $organizationOption->name }}
+                                </a>
+                            @endforeach
+                        </div>
+                    @else
+                        <a class="{{ request()->routeIs('admin.agents*') ? 'active' : '' }}" href="{{ route('admin.agents') }}">
+                            Live Chat Agents
+                        </a>
                     @endif
 
                     @forelse ($sidebarMenu ?? [] as $group)
@@ -347,7 +362,7 @@
                         </div>
                         @foreach ($group['items'] as $item)
                             @php
-                                $url = isset($item['route']) ? (Route::has($item['route']) ? route($item['route'], $item['params'] ?? []) : '#') : '#';
+                                $url = isset($item['route']) ? (\Illuminate\Support\Facades\Route::has($item['route']) ? route($item['route'], $item['params'] ?? []) : '#') : '#';
                             @endphp
                             <a class="{{ $item['active'] ? 'active' : '' }}" href="{{ $url }}">
                                 {{ $item['title'] }}

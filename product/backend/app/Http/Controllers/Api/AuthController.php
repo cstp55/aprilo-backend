@@ -20,6 +20,7 @@ class AuthController extends Controller
             'username' => ['required', 'string'],
             'password' => ['required', 'string'],
         ]);
+        $credentials['username'] = strtolower(trim($credentials['username']));
 
         $agent = AgentSupport::with(['user', 'organization'])
             ->whereHas('user', fn ($query) => $query->where('username', strtolower($credentials['username'])))

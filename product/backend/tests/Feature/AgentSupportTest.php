@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AgentSupport;
 use App\Models\Organization;
+use App\Models\OrganizationEntitlement;
 use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Subscription;
@@ -81,6 +82,30 @@ class AgentSupportTest extends TestCase
         ]);
     }
 
+    public function test_agent_username_is_unique_regardless_of_letter_case(): void
+    {
+        [$organization, $manager] = $this->organizationWithLiveChat();
+
+        $this->actingAs($manager, 'sanctum')->postJson('/api/agents', [
+            'full_name' => 'First Agent',
+            'username' => 'Support.Agent',
+            'password' => 'SecurePass123!',
+            'nickname' => 'First',
+        ])->assertCreated();
+
+        $this->actingAs($manager, 'sanctum')->postJson('/api/agents', [
+            'full_name' => 'Second Agent',
+            'username' => ' support.agent ',
+            'password' => 'SecurePass123!',
+            'nickname' => 'Second',
+        ])->assertStatus(422)->assertJsonValidationErrors(['username']);
+
+        $this->assertDatabaseHas('users', [
+            'organization_id' => $organization->id,
+            'username' => 'support.agent',
+        ]);
+    }
+
     public function test_agent_cannot_manage_other_agents(): void
     {
         [$organization] = $this->organizationWithLiveChat();
@@ -101,6 +126,34 @@ class AgentSupportTest extends TestCase
 
         $this->actingAs($agentUser, 'sanctum')->getJson('/api/agents')
             ->assertForbidden();
+    }
+
+    public function test_organization_user_can_manage_agents_from_the_laravel_blade_page(): void
+    {
+        [$organization, $manager] = $this->organizationWithLiveChat();
+
+        $this->actingAs($manager)
+            ->get('/admin/agents')
+            ->assertOk()
+            ->assertViewIs('admin.agents')
+            ->assertSee('Create support agent');
+
+        $this->actingAs($manager)
+            ->post('/admin/agents', [
+                'full_name' => 'Blade Agent',
+                'username' => 'blade.agent',
+                'email' => 'blade@example.com',
+                'password' => 'SecurePass123!',
+                'nickname' => 'Blade',
+                'availability_status' => 'offline',
+                'availability_slots' => '09:00-17:00',
+            ])
+            ->assertRedirect('/admin/agents');
+
+        $this->assertDatabaseHas('agent_supports', [
+            'organization_id' => $organization->id,
+            'nickname' => 'Blade',
+        ]);
     }
 
     private function organizationWithLiveChat(bool $withSubscription = true): array
@@ -131,12 +184,20 @@ class AgentSupportTest extends TestCase
                 'name' => 'Support Plan',
                 'is_active' => true,
             ]);
-            Subscription::create([
+            $subscription = Subscription::create([
                 'organization_id' => $organization->id,
                 'product_id' => $product->id,
                 'plan_id' => $plan->id,
                 'razorpay_subscription_id' => 'sub_' . uniqid(),
                 'status' => 'active',
+            ]);
+            OrganizationEntitlement::create([
+                'organization_id' => $organization->id,
+                'subscription_id' => $subscription->id,
+                'product_id' => $product->id,
+                'feature_key' => 'support.agents',
+                'status' => 'active',
+                'limits' => ['max_agents' => 10],
             ]);
         }
 

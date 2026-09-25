@@ -43,6 +43,36 @@ class Organization extends Model
         return $this->hasMany(AgentSupport::class);
     }
 
+    public function entitlements(): HasMany
+    {
+        return $this->hasMany(OrganizationEntitlement::class);
+    }
+
+    public function hasEntitlement(string $feature): bool
+    {
+        return $this->entitlements()
+            ->where('feature_key', $feature)
+            ->where('status', 'active')
+            ->where(function ($query): void {
+                $query->whereNull('starts_at')->orWhere('starts_at', '<=', now());
+            })
+            ->where(function ($query): void {
+                $query->whereNull('ends_at')->orWhere('ends_at', '>=', now());
+            })
+            ->exists();
+    }
+
+    public function supportAgentLimit(): ?int
+    {
+        return $this->entitlements()
+            ->where('feature_key', 'support.agents')
+            ->where('status', 'active')
+            ->get()
+            ->map(fn (OrganizationEntitlement $entitlement) => $entitlement->limits['max_agents'] ?? null)
+            ->filter(fn ($limit) => $limit !== null)
+            ->min();
+    }
+
     public function hasFeature(string $feature): bool
     {
         $subscriptions = $this->subscriptions()
@@ -72,7 +102,7 @@ class Organization extends Model
         $settings = $this->settings;
 
         return ($settings?->live_chat_enabled ?? true)
-            && ($this->hasFeature('live_chat') || $this->hasFeature('support_agents'));
+            && $this->hasEntitlement('support.agents');
     }
 
     private function featureValue(array $features, string $feature): bool

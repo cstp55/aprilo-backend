@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AgentSupport;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,18 +30,23 @@ class AgentSupportController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, AuditLogger $audit): JsonResponse
     {
         $organization = $this->organizationFor($request);
         $this->authorizeManager($request, $organization);
         $this->ensureFeature($organization);
 
+        $agentLimit = $organization->supportAgentLimit() ?? $organization->settings?->max_support_agents;
         abort_if(
-            $organization->settings?->max_support_agents !== null
-                && $organization->agentSupports()->count() >= $organization->settings->max_support_agents,
+            $agentLimit !== null
+                && $organization->agentSupports()->count() >= $agentLimit,
             422,
             'The organization has reached its support agent limit.'
         );
+
+        $request->merge([
+            'username' => strtolower(trim((string) $request->input('username'))),
+        ]);
 
         $validated = $request->validate([
             'full_name' => ['required', 'string', 'max:255'],
@@ -72,14 +78,21 @@ class AgentSupportController extends Controller
                 'is_active' => true,
             ]);
         });
+        $audit->log($request->user(), 'AGENT_CREATED', 'agent_support', $agent->id);
 
         return response()->json(['agent' => $this->payload($agent->load('user'))], 201);
     }
 
-    public function update(Request $request, AgentSupport $agentSupport): JsonResponse
+    public function update(Request $request, AgentSupport $agentSupport, AuditLogger $audit): JsonResponse
     {
         $this->ensureAgentOrganization($request, $agentSupport);
         $this->ensureFeature($agentSupport->organization);
+
+        if ($request->exists('username')) {
+            $request->merge([
+                'username' => strtolower(trim((string) $request->input('username'))),
+            ]);
+        }
 
         $validated = $request->validate([
             'full_name' => ['sometimes', 'string', 'max:255'],
@@ -111,15 +124,17 @@ class AgentSupportController extends Controller
                 $agentSupport->user->update(['status' => $validated['is_active'] ? 'active' : 'inactive']);
             }
         });
+        $audit->log($request->user(), array_key_exists('is_active', $validated) && ! $validated['is_active'] ? 'AGENT_DEACTIVATED' : 'AGENT_UPDATED', 'agent_support', $agentSupport->id);
 
         return response()->json(['agent' => $this->payload($agentSupport->fresh('user'))]);
     }
 
-    public function destroy(Request $request, AgentSupport $agentSupport): JsonResponse
+    public function destroy(Request $request, AgentSupport $agentSupport, AuditLogger $audit): JsonResponse
     {
         $this->ensureAgentOrganization($request, $agentSupport);
         $this->ensureFeature($agentSupport->organization);
         $agentSupport->user()->delete();
+        $audit->log($request->user(), 'AGENT_DELETED', 'agent_support', $agentSupport->id);
 
         return response()->json(['message' => 'Agent deleted.']);
     }

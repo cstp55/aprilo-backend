@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\OnboardingRequest;
+use App\Models\AuditEvent;
+use App\Models\OrganizationEntitlement;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
 use App\Models\Plan;
@@ -12,17 +14,20 @@ use App\Models\Product;
 use App\Models\Role;
 use App\Models\Subscription;
 use App\Models\User;
-use App\Services\RazorpayService;
+use App\Exceptions\PaymentServiceException;
+use App\Jobs\ProvisionOnboarding;
+use App\Services\RazorpaySubscriptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
 class OnboardingController extends Controller
 {
-    public function __construct(private RazorpayService $razorpayService)
+    public function __construct(private RazorpaySubscriptionService $razorpayService)
     {
     }
 
@@ -154,21 +159,32 @@ class OnboardingController extends Controller
             ], 422);
         }
 
-        $product = Product::findOrFail($request->input('product_id'));
-        $plan = Plan::where('product_id', $product->id)->where('id', $request->input('plan_id'))->firstOrFail();
+        $product = Product::where('id', $request->input('product_id'))
+            ->where('is_active', true)
+            ->firstOrFail();
+        $plan = Plan::where('product_id', $product->id)
+            ->where('id', $request->input('plan_id'))
+            ->where('is_active', true)
+            ->firstOrFail();
+
+        if (! $this->razorpayService->isMockMode() && blank($plan->razorpay_plan_id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This plan is not configured for recurring billing yet.',
+            ], 422);
+        }
 
         $accountData = $request->input('account');
         $organizationData = $request->input('organization');
 
-        // Create Razorpay recurring subscription
-        $razorpaySub = $this->razorpayService->createSubscription([
-            'razorpay_plan_id' => $plan->razorpay_plan_id,
-            'price' => (float) $plan->price,
-            'currency' => $plan->currency,
-            'trial_period_days' => $plan->trial_period_days,
-            'email' => $accountData['email'],
-            'org_name' => $organizationData['name'],
-        ]);
+        if (OnboardingRequest::where('status', 'pending')
+            ->whereJsonContains('account_data->email', strtolower($accountData['email']))
+            ->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'An onboarding request for this email is already in progress.',
+            ], 422);
+        }
 
         $token = Str::random(64);
         $trialDays = (int) $plan->trial_period_days;
@@ -184,6 +200,7 @@ class OnboardingController extends Controller
                 'email' => strtolower(trim($accountData['email'])),
                 'phone' => trim($accountData['phone']),
                 'password_hash' => Hash::make($accountData['password']),
+                'password_encrypted' => Crypt::encryptString($accountData['password']),
             ],
             'organization_data' => [
                 'name' => trim($organizationData['name']),
@@ -194,11 +211,46 @@ class OnboardingController extends Controller
                 'team_size' => $organizationData['team_size'] ?? '1-10',
                 'timezone' => $organizationData['timezone'] ?? 'Asia/Kolkata',
             ],
-            'razorpay_subscription_id' => $razorpaySub['id'],
-            'status' => 'pending',
+            'status' => 'payment_pending',
+            'provisioning_status' => 'pending',
             'trial_ends_at' => $trialEndsAt,
             'autopay_authorized' => true,
         ]);
+
+        try {
+            $customer = $this->razorpayService->createCustomer([
+                'name' => $accountData['name'],
+                'email' => $accountData['email'],
+                'contact' => $accountData['phone'],
+                'notes' => ['onboarding_token' => $token],
+            ]);
+            $razorpaySub = $this->razorpayService->createSubscription([
+                'razorpay_plan_id' => $plan->razorpay_plan_id,
+                'customer_id' => $customer['id'],
+                'trial_period_days' => $plan->trial_period_days,
+                'notes' => [
+                    'customer_email' => $accountData['email'],
+                    'org_name' => $organizationData['name'],
+                    'onboarding_token' => $token,
+                ],
+            ]);
+            $onboardingRequest->update([
+                'razorpay_customer_id' => $customer['id'],
+                'razorpay_subscription_id' => $razorpaySub['id'],
+                'status' => 'pending',
+            ]);
+        } catch (PaymentServiceException $exception) {
+            $onboardingRequest->update([
+                'status' => 'payment_failed',
+                'provisioning_error' => 'Payment authorization could not be started. Please try again or contact support.',
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'We could not start payment authorization. Your onboarding information was saved and can be retried safely.',
+                'onboarding_token' => $token,
+            ], 503);
+        }
 
         return response()->json([
             'success' => true,
@@ -249,6 +301,9 @@ class OnboardingController extends Controller
 
         // Idempotency: If already completed, return existing credentials
         if ($onboarding->status === 'completed' && $onboarding->organization_id && $onboarding->user_id) {
+            if ($onboarding->provisioning_status !== 'completed') {
+                ProvisionOnboarding::dispatch($onboarding->id);
+            }
             $user = User::find($onboarding->user_id);
             $org = Organization::find($onboarding->organization_id);
             $token = $user->createToken('onboarding-session')->plainTextToken;
@@ -360,6 +415,31 @@ class OnboardingController extends Controller
                 ],
             ]);
 
+            $maxAgents = data_get($plan->metadata, 'max_agents') ?? data_get($product->metadata, 'max_agents');
+            foreach ($plan->features ?? [] as $feature) {
+                if ($maxAgents === null && preg_match('/(\d+)\s+agents/i', (string) $feature, $matches)) {
+                    $maxAgents = (int) $matches[1];
+                }
+            }
+
+            $entitlementKeys = $product->category === 'ai_support'
+                ? ['support', 'support.ai', 'support.agents', 'support.website_chat']
+                : [];
+            foreach ($entitlementKeys as $featureKey) {
+                OrganizationEntitlement::create([
+                    'organization_id' => $organization->id,
+                    'subscription_id' => $subscription->id,
+                    'product_id' => $product->id,
+                    'feature_key' => $featureKey,
+                    'status' => 'active',
+                    'limits' => $featureKey === 'support.agents' && $maxAgents !== null
+                        ? ['max_agents' => (int) $maxAgents]
+                        : null,
+                    'starts_at' => now(),
+                    'ends_at' => null,
+                ]);
+            }
+
             // 6. Update OnboardingRequest
             $onboarding->update([
                 'status' => 'completed',
@@ -371,6 +451,21 @@ class OnboardingController extends Controller
                 'sso_token_expires_at' => now()->addMinutes(30),
             ]);
 
+            foreach ([
+                'ORGANIZATION_CREATED' => [$organization->id, 'organization'],
+                'SUBSCRIPTION_CREATED' => [$subscription->id, 'subscription'],
+                'TRIAL_STARTED' => [$subscription->id, 'subscription'],
+            ] as $event => [$entityId, $entityType]) {
+                AuditEvent::create([
+                    'organization_id' => $organization->id,
+                    'actor_user_id' => $user->id,
+                    'event_type' => $event,
+                    'entity_type' => $entityType,
+                    'entity_id' => $entityId,
+                    'metadata' => ['plan_id' => $plan->id, 'product_id' => $product->id],
+                ]);
+            }
+
             $sanctumToken = $user->createToken('onboarding-session')->plainTextToken;
 
             return [
@@ -381,6 +476,8 @@ class OnboardingController extends Controller
                 'sso_token' => $ssoToken,
             ];
         });
+
+        ProvisionOnboarding::dispatch($onboarding->id);
 
         return response()->json([
             'success' => true,

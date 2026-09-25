@@ -59,6 +59,11 @@ trait HasPermissions
             return true;
         }
 
+        // Organization owners have full access within their own tenant.
+        if (($this->attributes['role'] ?? null) === 'owner') {
+            return true;
+        }
+
         // 2. Check assigned Role permissions
         if ($this->roleModel) {
             return $this->roleModel->hasPermission($permissionSlug);

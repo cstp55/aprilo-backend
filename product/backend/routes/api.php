@@ -83,11 +83,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
 // Customer & Organization Onboarding API
 Route::prefix('onboarding')->group(function (): void {
-    Route::get('/catalog', [\App\Http\Controllers\Api\OnboardingController::class, 'catalog']);
-    Route::post('/check-username', [\App\Http\Controllers\Api\OnboardingController::class, 'checkUsername']);
-    Route::post('/initiate', [\App\Http\Controllers\Api\OnboardingController::class, 'initiate']);
-    Route::post('/verify', [\App\Http\Controllers\Api\OnboardingController::class, 'verify']);
+    Route::get('/catalog', [\App\Http\Controllers\Api\OnboardingController::class, 'catalog'])->middleware('throttle:120,1');
+    Route::post('/check-username', [\App\Http\Controllers\Api\OnboardingController::class, 'checkUsername'])->middleware('throttle:30,1');
+    Route::post('/initiate', [\App\Http\Controllers\Api\OnboardingController::class, 'initiate'])->middleware('throttle:10,1');
+    Route::post('/verify', [\App\Http\Controllers\Api\OnboardingController::class, 'verify'])->middleware('throttle:10,1');
 });
 
 // Razorpay Webhooks
-Route::post('/webhooks/razorpay', [\App\Http\Controllers\Api\RazorpayWebhookController::class, 'handle']);
+Route::post('/webhooks/razorpay', [\App\Http\Controllers\Api\RazorpayWebhookController::class, 'handle'])->middleware('throttle:120,1');

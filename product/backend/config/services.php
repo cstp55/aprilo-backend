@@ -29,9 +29,15 @@ return [
     ],
 
         'razorpay' => [
-        'key_id' => env('RAZORPAY_KEY_ID', 'rzp_test_aprilo_mock_key'),
-        'key_secret' => env('RAZORPAY_KEY_SECRET', 'aprilo_mock_secret_key_2026'),
-        'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET', 'aprilo_webhook_secret_2026'),
+            'key_id' => env('RAZORPAY_KEY_ID'),
+            'key_secret' => env('RAZORPAY_KEY_SECRET'),
+            'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
+    ],
+
+    'aprilo' => [
+        'registration_url' => env('APRILO_REGISTRATION_API_URL'),
+        'registration_token' => env('APRILO_REGISTRATION_API_TOKEN'),
+        'support_email' => env('APRILO_SUPPORT_EMAIL', 'support@aprilo.ai'),
     ],
 
     'slack' => [

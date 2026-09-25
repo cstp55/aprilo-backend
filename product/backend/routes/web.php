@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminConsoleController;
 use App\Http\Controllers\Admin\EcommerceAdminController;
 use App\Http\Controllers\Admin\RoleManagementController;
 use App\Http\Controllers\Admin\SuperAdminController;
+use App\Http\Controllers\Admin\AgentSupportController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -26,12 +27,20 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         // Base / Dynamic Dashboard
         Route::get('/', [AdminConsoleController::class, 'dashboard'])->name('dashboard');
         Route::get('/chat', function () { return redirect()->route('admin.dashboard', ['tab' => 'inbox']); })->name('chat');
+        Route::get('/agents', [AgentSupportController::class, 'index'])->name('agents');
+        Route::post('/agents', [AgentSupportController::class, 'store'])->name('agents.store');
+        Route::patch('/agents/{agentSupport}', [AgentSupportController::class, 'update'])->name('agents.update');
+        Route::delete('/agents/{agentSupport}', [AgentSupportController::class, 'destroy'])->name('agents.destroy');
 
         // Super Admin Platform Routes
         Route::prefix('super')->name('super.')->group(function (): void {
             Route::get('/dashboard', [SuperAdminController::class, 'dashboard'])->name('dashboard');
             Route::get('/organizations', [SuperAdminController::class, 'organizations'])->name('organizations');
+            Route::post('/organizations', [SuperAdminController::class, 'storeOrganization'])->name('organizations.store');
             Route::patch('/organizations/{organization}', [SuperAdminController::class, 'updateOrgStatus'])->name('organizations.update');
+            Route::get('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'subscriptionAccess'])->name('organizations.subscriptions');
+            Route::post('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'grantSubscription'])->name('organizations.subscriptions.store');
+            Route::patch('/organizations/{organization}/subscriptions/{subscription}/payment-status', [SuperAdminController::class, 'updatePaymentStatus'])->name('organizations.subscriptions.payment-status');
             Route::get('/revenue', [SuperAdminController::class, 'revenue'])->name('revenue');
             Route::get('/logs', [SuperAdminController::class, 'logs'])->name('logs');
         });

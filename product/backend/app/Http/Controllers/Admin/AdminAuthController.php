@@ -63,6 +63,6 @@ class AdminAuthController extends Controller
 
     private function isAdmin(string $role): bool
     {
-        return in_array($role, [UserRole::Owner->value, UserRole::HrAdmin->value], true);
+        return in_array($role, [UserRole::Owner->value, UserRole::HrAdmin->value, 'super_admin'], true);
     }
 }

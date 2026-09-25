@@ -68,6 +68,13 @@ class NavigationService
                     'active' => request()->routeIs('admin.ecommerce.dashboard'),
                 ];
             }
+        } else {
+            $dashboardItems[] = [
+                'title' => 'Operations Dashboard',
+                'route' => 'admin.dashboard',
+                'icon' => 'layout-dashboard',
+                'active' => request()->routeIs('admin.dashboard'),
+            ];
         }
 
         if (! empty($dashboardItems)) {

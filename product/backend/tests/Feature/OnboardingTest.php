@@ -74,7 +74,7 @@ class OnboardingTest extends TestCase
         $plan = Plan::where('product_id', $product->id)->where('slug', 'starter')->firstOrFail();
 
         $username = 'testcorp_' . rand(1000, 9999);
-        $email = 'admin@' . $username . '.com';
+        $email = 'admin@' . str_replace('_', '-', $username) . '.com';
 
         // 1. Initiate
         $initiateResponse = $this->postJson('/api/onboarding/initiate', [
@@ -90,7 +90,7 @@ class OnboardingTest extends TestCase
             ],
             'organization' => [
                 'name' => 'Acme Corp ' . rand(100, 999),
-                'email' => 'contact@' . $username . '.com',
+                'email' => 'contact@' . str_replace('_', '-', $username) . '.com',
                 'website' => 'https://acme.example.com',
                 'country' => 'India',
                 'industry' => 'E-Commerce',
