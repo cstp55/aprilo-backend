@@ -7,14 +7,34 @@ use App\Jobs\SendWhatsAppCampaignRecipient;
 use App\Models\User;
 use App\Models\WhatsAppCampaign;
 use App\Models\WhatsAppCampaignRecipient;
+use App\Services\WhatsAppCloudApi;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use RuntimeException;
 
 class WhatsAppCampaignController extends Controller
 {
+    public function templates(Request $request, WhatsAppCloudApi $whatsApp): JsonResponse
+    {
+        $this->authorizeSuperAdmin($request);
+
+        try {
+            $templates = $this->approvedTemplates($whatsApp);
+        } catch (ConnectionException|RuntimeException $exception) {
+            $status = config('services.whatsapp.business_account_id') ? 502 : 503;
+
+            return response()->json(['message' => $exception->getMessage()], $status);
+        }
+
+        return response()->json(['templates' => $templates]);
+    }
+
     public function index(Request $request): View
     {
         $this->authorizeSuperAdmin($request);
@@ -55,12 +75,13 @@ class WhatsAppCampaignController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, WhatsAppCloudApi $whatsApp): RedirectResponse
     {
         $this->authorizeSuperAdmin($request);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            'delivery_mode' => ['required', 'in:queued,instant'],
             'recipient_mode' => ['required', 'in:users,manual'],
             'user_ids' => ['required_if:recipient_mode,users', 'array', 'min:1'],
             'user_ids.*' => ['required', 'uuid', 'distinct', 'exists:users,id'],
@@ -72,6 +93,36 @@ class WhatsAppCampaignController extends Controller
             'message_text' => ['required_if:message_type,text', 'nullable', 'string', 'max:4096'],
             'consent_confirmed' => ['accepted'],
         ]);
+
+        if ($validated['delivery_mode'] === 'instant' && $validated['recipient_mode'] !== 'manual') {
+            throw ValidationException::withMessages([
+                'delivery_mode' => 'Instant sends are available only for one manually entered WhatsApp number.',
+            ]);
+        }
+
+        $expectedParameterCount = 0;
+        if ($validated['message_type'] === 'template') {
+            try {
+                $templates = $this->approvedTemplates($whatsApp);
+            } catch (ConnectionException|RuntimeException) {
+                throw ValidationException::withMessages([
+                    'template_name' => 'Could not verify templates with Meta. Reload the page and try again.',
+                ]);
+            }
+
+            $selectedTemplate = collect($templates)->first(fn (array $template): bool =>
+                $template['name'] === $validated['template_name'] &&
+                $template['language'] === $validated['template_language']
+            );
+
+            if (! $selectedTemplate) {
+                throw ValidationException::withMessages([
+                    'template_name' => 'Select an approved template from the Meta template list.',
+                ]);
+            }
+
+            $expectedParameterCount = $selectedTemplate['parameter_count'];
+        }
 
         if ($validated['recipient_mode'] === 'manual') {
             $phone = $this->normalizePhone($validated['recipient_phone']);
@@ -122,6 +173,12 @@ class WhatsAppCampaignController extends Controller
             ? []
             : preg_split('/\r\n|\r|\n/', trim($validated['template_parameters']));
 
+        if ($validated['message_type'] === 'template' && count($parameters) !== $expectedParameterCount) {
+            throw ValidationException::withMessages([
+                'template_parameters' => "The selected template expects {$expectedParameterCount} body parameter(s).",
+            ]);
+        }
+
         $campaign = DB::transaction(function () use ($request, $validated, $parameters, $recipients): WhatsAppCampaign {
             $campaign = WhatsAppCampaign::create([
                 'created_by' => $request->user()->id,
@@ -141,11 +198,43 @@ class WhatsAppCampaignController extends Controller
         });
 
         foreach ($campaign->recipients as $recipient) {
-            SendWhatsAppCampaignRecipient::dispatch($recipient);
+            if ($validated['delivery_mode'] === 'instant') {
+                try {
+                    $result = $whatsApp->send($campaign, $recipient);
+                    $recipient->update([
+                        'status' => 'accepted',
+                        'whatsapp_message_id' => data_get($result, 'messages.0.id'),
+                        'response_json' => $result,
+                        'processed_at' => now(),
+                    ]);
+                    $campaign->update([
+                        'status' => 'completed',
+                        'completed_at' => now(),
+                    ]);
+                } catch (ConnectionException|RuntimeException $exception) {
+                    $recipient->update([
+                        'status' => 'failed',
+                        'error_message' => mb_substr($exception->getMessage(), 0, 2000),
+                        'processed_at' => now(),
+                    ]);
+                    $campaign->update([
+                        'status' => 'failed',
+                        'completed_at' => now(),
+                    ]);
+
+                    return redirect()->route('admin.super.whatsapp-campaigns')
+                        ->with('error', "Instant send failed: {$exception->getMessage()}");
+                }
+            } else {
+                SendWhatsAppCampaignRecipient::dispatch($recipient);
+            }
         }
 
-        return redirect()->route('admin.super.whatsapp-campaigns')
-            ->with('status', "Campaign '{$campaign->name}' queued for {$campaign->recipients()->count()} recipient(s).");
+        $message = $validated['delivery_mode'] === 'instant'
+            ? "WhatsApp accepted the instant message for {$campaign->recipients()->first()->recipient_phone}."
+            : "Campaign '{$campaign->name}' queued for {$campaign->recipients()->count()} recipient(s).";
+
+        return redirect()->route('admin.super.whatsapp-campaigns')->with('status', $message);
     }
 
     private function normalizePhone(?string $phone): ?string
@@ -153,6 +242,20 @@ class WhatsAppCampaignController extends Controller
         $digits = preg_replace('/\D+/', '', $phone ?? '');
 
         return preg_match('/^[1-9][0-9]{7,14}$/', $digits) ? $digits : null;
+    }
+
+    private function approvedTemplates(WhatsAppCloudApi $whatsApp): array
+    {
+        $businessAccountId = config('services.whatsapp.business_account_id');
+        if (! $businessAccountId) {
+            throw new RuntimeException('WhatsApp business account ID is not configured.');
+        }
+
+        return Cache::remember(
+            'whatsapp.approved_templates.' . hash('sha256', $businessAccountId),
+            now()->addMinutes(5),
+            fn (): array => $whatsApp->approvedTemplates()
+        );
     }
 
     private function authorizeSuperAdmin(Request $request): void

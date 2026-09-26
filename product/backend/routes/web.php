@@ -47,6 +47,7 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::get('/cache', [SuperAdminController::class, 'cache'])->name('cache');
             Route::post('/cache/clear', [SuperAdminController::class, 'clearCache'])->name('cache.clear');
             Route::get('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'index'])->name('whatsapp-campaigns');
+            Route::get('/whatsapp-campaigns/templates', [WhatsAppCampaignController::class, 'templates'])->name('whatsapp-campaigns.templates');
             Route::post('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'store'])->name('whatsapp-campaigns.store');
         });
         Route::get('/super', function () { return redirect()->route('admin.super.dashboard'); })->name('super');
