@@ -43,6 +43,18 @@ class NavigationService
                         'icon' => 'history',
                         'active' => request()->routeIs('admin.super.logs*'),
                     ],
+                    [
+                        'title' => 'System Cache',
+                        'route' => 'admin.super.cache',
+                        'icon' => 'settings',
+                        'active' => request()->routeIs('admin.super.cache*'),
+                    ],
+                    [
+                        'title' => 'WhatsApp Campaigns',
+                        'route' => 'admin.super.whatsapp-campaigns',
+                        'icon' => 'message-circle',
+                        'active' => request()->routeIs('admin.super.whatsapp-campaigns*'),
+                    ],
                 ],
             ];
         }

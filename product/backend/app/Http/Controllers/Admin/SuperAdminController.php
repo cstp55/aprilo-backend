@@ -15,6 +15,7 @@ use App\Models\Subscription;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -321,6 +322,47 @@ class SuperAdminController extends Controller
             ->paginate(20);
 
         return view('admin.super.logs', compact('logs'));
+    }
+
+    public function cache(Request $request): View
+    {
+        $this->authorizeSuperAdmin($request);
+
+        return view('admin.super.cache');
+    }
+
+    public function clearCache(Request $request): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+
+        $validated = $request->validate([
+            'cache' => ['required', Rule::in(['application', 'config', 'route', 'view', 'event', 'all'])],
+        ]);
+
+        $commands = match ($validated['cache']) {
+            'application' => ['cache:clear'],
+            'config' => ['config:clear'],
+            'route' => ['route:clear'],
+            'view' => ['view:clear'],
+            'event' => ['event:clear'],
+            'all' => ['optimize:clear'],
+        };
+
+        foreach ($commands as $command) {
+            Artisan::call($command);
+        }
+
+        $labels = [
+            'application' => 'application cache',
+            'config' => 'configuration cache',
+            'route' => 'route cache',
+            'view' => 'compiled view cache',
+            'event' => 'event cache',
+            'all' => 'all Laravel caches',
+        ];
+
+        return redirect()->route('admin.super.cache')
+            ->with('status', ucfirst($labels[$validated['cache']]) . ' cleared successfully.');
     }
 
     private function authorizeSuperAdmin(Request $request): void

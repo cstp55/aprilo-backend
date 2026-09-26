@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminConsoleController;
 use App\Http\Controllers\Admin\EcommerceAdminController;
 use App\Http\Controllers\Admin\RoleManagementController;
 use App\Http\Controllers\Admin\SuperAdminController;
+use App\Http\Controllers\Admin\WhatsAppCampaignController;
 use App\Http\Controllers\Admin\AgentSupportController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,10 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::patch('/organizations/{organization}/subscriptions/{subscription}/payment-status', [SuperAdminController::class, 'updatePaymentStatus'])->name('organizations.subscriptions.payment-status');
             Route::get('/revenue', [SuperAdminController::class, 'revenue'])->name('revenue');
             Route::get('/logs', [SuperAdminController::class, 'logs'])->name('logs');
+            Route::get('/cache', [SuperAdminController::class, 'cache'])->name('cache');
+            Route::post('/cache/clear', [SuperAdminController::class, 'clearCache'])->name('cache.clear');
+            Route::get('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'index'])->name('whatsapp-campaigns');
+            Route::post('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'store'])->name('whatsapp-campaigns.store');
         });
         Route::get('/super', function () { return redirect()->route('admin.super.dashboard'); })->name('super');
 

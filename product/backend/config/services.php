@@ -40,6 +40,12 @@ return [
         'support_email' => env('APRILO_SUPPORT_EMAIL', 'support@aprilo.ai'),
     ],
 
+    'whatsapp' => [
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v25.0'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
