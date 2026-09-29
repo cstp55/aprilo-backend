@@ -16,6 +16,8 @@
         margin-bottom: 24px;
         padding-bottom: 16px;
         border-bottom: 1px solid var(--line);
+        gap: 16px;
+        flex-wrap: wrap;
     }
     
     /* Sub-Navigation Tabs */
@@ -414,6 +416,71 @@
         border-radius: 6px;
         padding: 6px 10px;
         font-size: 11.5px;
+    }
+
+    @media (max-width: 1100px) {
+        .inbox-container {
+            grid-template-columns: 260px 1fr;
+        }
+        .inbox-right {
+            grid-column: 1 / -1;
+            border-left: none;
+            border-top: 1px solid var(--line);
+        }
+        .branding-grid {
+            grid-template-columns: 1fr;
+        }
+        .preview-box {
+            min-height: 360px;
+        }
+    }
+
+    @media (max-width: 860px) {
+        .dashboard-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .inbox-container {
+            grid-template-columns: 1fr;
+            height: auto;
+        }
+        .inbox-left,
+        .inbox-middle,
+        .inbox-right {
+            border: none;
+        }
+        .inbox-middle,
+        .inbox-right {
+            min-height: 320px;
+        }
+        .inbox-left {
+            border-bottom: 1px solid var(--line);
+        }
+        .chat-bubble {
+            max-width: 85%;
+        }
+    }
+
+    @media (max-width: 560px) {
+        .tabs-bar {
+            padding-bottom: 6px;
+        }
+        .tab-btn {
+            padding: 9px 12px;
+            font-size: 12px;
+        }
+        .dashboard-header h1 {
+            font-size: 26px;
+        }
+        .help {
+            font-size: 13px;
+        }
+        .mock-widget {
+            width: min(100%, 320px);
+        }
+        .preview-box {
+            padding: 18px 12px;
+        }
     }
 
     /* Barcode styling */

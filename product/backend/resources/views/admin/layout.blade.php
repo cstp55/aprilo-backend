@@ -91,6 +91,13 @@
             font-size: 20px;
             font-family: 'Outfit', sans-serif;
             box-shadow: 0 4px 10px rgba(34, 197, 94, 0.2);
+            overflow: hidden;
+        }
+        .brand-mark img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
         }
         .brand-title {
             font-family: 'Outfit', sans-serif;
@@ -173,6 +180,70 @@
         .main {
             padding: 32px;
             overflow-y: auto;
+            padding-top: 96px;
+        }
+        .topbar {
+            position: fixed;
+            top: 0;
+            left: 260px;
+            right: 0;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 0 22px 0 20px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--line);
+            z-index: 20;
+        }
+        .topbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+        .topbar-brand .brand-mark {
+            width: 34px;
+            height: 34px;
+        }
+        .topbar-brand .brand-title {
+            font-size: 16px;
+            line-height: 1.2;
+        }
+        .topbar-user {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            min-width: 0;
+        }
+        .topbar-user-card {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 2px;
+            text-align: right;
+            min-width: 0;
+        }
+        .topbar-user-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+        .topbar-user-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink);
+            white-space: nowrap;
+        }
+        .topbar-user-role {
+            font-size: 11px;
+            color: var(--muted);
+            white-space: nowrap;
         }
         .header {
             display: flex;
@@ -313,19 +384,134 @@
             gap: 8px;
             align-items: center;
         }
+        .mobile-sidebar-toggle {
+            display: none;
+        }
+        .mobile-sidebar-overlay {
+            display: none;
+        }
+        @media (max-width: 1200px) {
+            .shell { grid-template-columns: 220px 1fr; }
+            .main { padding: 24px 18px; }
+        }
+
         @media (max-width: 900px) {
-            .shell { grid-template-columns: 1fr; }
+            .shell {
+                display: block;
+            }
             .sidebar {
-                position: static;
-                height: auto;
+                position: fixed;
+                left: 0;
+                top: 0;
+                bottom: 0;
+                width: 260px;
+                height: 100vh;
+                z-index: 30;
+                border-right: 1px solid var(--line);
+                border-bottom: none;
+                padding: 18px 16px;
+                box-shadow: 6px 0 18px rgba(15, 23, 42, 0.08);
+                transform: translateX(-105%);
+                transition: transform 0.25s ease;
+            }
+            body.sidebar-open .sidebar {
+                transform: translateX(0);
+            }
+            .main {
+                padding: 88px 16px 28px;
+            }
+            .topbar {
+                left: 0;
+                right: 0;
+                height: 64px;
+                padding: 0 12px 0 10px;
+            }
+            .topbar-user {
+                display: none;
+            }
+            .topbar-brand {
+                flex: 1;
+            }
+            .mobile-sidebar-toggle {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 38px;
+                height: 38px;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                background: #fff;
+                color: var(--ink);
+                box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+                cursor: pointer;
+                font-size: 20px;
+                line-height: 1;
+                z-index: 40;
+            }
+            .mobile-sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.35);
+                z-index: 25;
+                display: block;
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 0.2s ease;
+            }
+            body.sidebar-open .mobile-sidebar-overlay {
+                opacity: 1;
+                pointer-events: auto;
+            }
+            .nav {
+                margin-top: 20px;
             }
             .logout { position: static; margin-top: 24px; }
             .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 560px) {
+            .shell {
+                display: block;
+            }
+            .sidebar {
+                width: 220px;
+            }
+            .brand-section {
+                align-items: center;
+            }
+            .brand-title {
+                font-size: 16px;
+            }
+            .nav a {
+                padding: 10px 12px;
+                font-size: 12.5px;
+            }
+            .card {
+                padding: 16px;
+            }
         }
     </style>
     <link rel="icon" type="image/x-icon" href="{{ asset('logo.png') }}">
 </head>
 <body>
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="brand-mark"><img src="{{ asset('logo.png') }}" alt="Aprilo AI Logo"></div>
+            <div class="brand-title">Aprilo AI</div>
+        </div>
+
+        <div class="topbar-user">
+            <div class="topbar-user-card">
+                <span class="topbar-user-label">Logged in</span>
+                <span class="topbar-user-name">{{ auth()->user()->name ?? 'Admin User' }}</span>
+                <span class="topbar-user-role">{{ auth()->user()->roleModel->name ?? ucfirst(str_replace('_', ' ', auth()->user()->role_slug ?? 'admin')) }}</span>
+            </div>
+        </div>
+
+        <button class="mobile-sidebar-toggle" type="button" aria-label="Toggle sidebar" aria-expanded="false">☰</button>
+    </header>
+
+    <div class="mobile-sidebar-overlay" aria-hidden="true"></div>
     <div class="shell">
         <aside class="sidebar">
             <div>
@@ -401,5 +587,35 @@
             @yield('content')
         </main>
     </div>
+
+    <script>
+        (function () {
+            const body = document.body;
+            const toggle = document.querySelector('.mobile-sidebar-toggle');
+            const overlay = document.querySelector('.mobile-sidebar-overlay');
+            if (!toggle || !overlay) return;
+
+            const setSidebarState = (open) => {
+                body.classList.toggle('sidebar-open', open);
+                toggle.setAttribute('aria-expanded', String(open));
+                toggle.textContent = open ? '✕' : '☰';
+            };
+
+            toggle.addEventListener('click', function () {
+                const isOpen = body.classList.contains('sidebar-open');
+                setSidebarState(!isOpen);
+            });
+
+            overlay.addEventListener('click', function () {
+                setSidebarState(false);
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && body.classList.contains('sidebar-open')) {
+                    setSidebarState(false);
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
