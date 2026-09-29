@@ -13,6 +13,10 @@ class NavigationService
         }
 
         $menu = [];
+        $owner = $user->role_slug === 'owner';
+        $organization = $user->organization;
+        $hasAi = ! $owner || $organization?->hasActiveProductCategory('ai_support');
+        $hasEcommerce = ! $owner || $organization?->hasActiveProductCategory('ecommerce');
 
         // 1. Super Admin Platform Group
         if ($user->isSuperAdmin()) {
@@ -63,7 +67,7 @@ class NavigationService
         $dashboardItems = [];
 
         if (! $user->isSuperAdmin()) {
-            if ($user->hasPermission('hr.dashboard.view') || $user->isHrAdmin()) {
+            if (! $owner && ($user->hasPermission('hr.dashboard.view') || $user->isHrAdmin())) {
                 $dashboardItems[] = [
                     'title' => 'HR Dashboard',
                     'route' => 'admin.dashboard',
@@ -72,12 +76,21 @@ class NavigationService
                 ];
             }
 
-            if ($user->hasPermission('ecommerce.dashboard.view') || $user->isEcommerceAdmin()) {
+            if (($hasEcommerce && $user->hasPermission('ecommerce.dashboard.view')) || $user->isEcommerceAdmin()) {
                 $dashboardItems[] = [
                     'title' => 'E-commerce Dashboard',
                     'route' => 'admin.ecommerce.dashboard',
                     'icon' => 'shopping-cart',
                     'active' => request()->routeIs('admin.ecommerce.dashboard'),
+                ];
+            }
+
+            if ($owner && $hasAi) {
+                $dashboardItems[] = [
+                    'title' => 'Aprilo AI Dashboard',
+                    'route' => 'admin.dashboard',
+                    'icon' => 'bot',
+                    'active' => request()->routeIs('admin.dashboard'),
                 ];
             }
         } else {
@@ -99,7 +112,7 @@ class NavigationService
         // 3. Knowledge & AI Operations
         $aiItems = [];
 
-        if ($user->hasPermission('knowledge.sources.view')) {
+        if ($hasAi && $user->hasPermission('knowledge.sources.view')) {
             $aiItems[] = [
                 'title' => 'Knowledge Sources',
                 'route' => 'admin.sources',
@@ -108,7 +121,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('widget.settings')) {
+        if ($hasAi && $user->hasPermission('widget.settings')) {
             $aiItems[] = [
                 'title' => 'Widget AI & Restrictions',
                 'route' => 'admin.settings',
@@ -118,7 +131,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('live_chat.view')) {
+        if ($hasAi && $user->hasPermission('live_chat.view')) {
             $aiItems[] = [
                 'title' => 'Live Agent Chat',
                 'route' => 'admin.chat',
@@ -127,7 +140,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('widget.script')) {
+        if ($hasAi && $user->hasPermission('widget.script')) {
             $aiItems[] = [
                 'title' => 'Embed Script (WG)',
                 'route' => 'admin.settings',
@@ -147,7 +160,7 @@ class NavigationService
         // 4. Human Review & Auditing
         $auditItems = [];
 
-        if ($user->hasPermission('escalations.view')) {
+        if ($hasAi && $user->hasPermission('escalations.view')) {
             $auditItems[] = [
                 'title' => 'Escalations Queue',
                 'route' => 'admin.escalations',
@@ -156,7 +169,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('logs.view')) {
+        if ($hasAi && $user->hasPermission('logs.view')) {
             $auditItems[] = [
                 'title' => 'Interaction Logs',
                 'route' => 'admin.logs',
@@ -175,7 +188,7 @@ class NavigationService
         // 5. HR Operations
         $hrItems = [];
 
-        if ($user->hasPermission('employee.leaves.manage')) {
+        if (! $owner && $user->hasPermission('employee.leaves.manage')) {
             $hrItems[] = [
                 'title' => 'Leave Requests',
                 'route' => 'admin.leaves',
@@ -184,7 +197,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('employee.wfh.manage')) {
+        if (! $owner && $user->hasPermission('employee.wfh.manage')) {
             $hrItems[] = [
                 'title' => 'WFH Requests',
                 'route' => 'admin.wfh',
@@ -193,7 +206,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('employee.validate')) {
+        if (! $owner && $user->hasPermission('employee.validate')) {
             $hrItems[] = [
                 'title' => 'Validate Employee',
                 'route' => 'admin.employees',
@@ -202,7 +215,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('employee.idcards.manage')) {
+        if (! $owner && $user->hasPermission('employee.idcards.manage')) {
             $hrItems[] = [
                 'title' => 'ID Cards',
                 'route' => 'admin.idcards',
@@ -221,7 +234,7 @@ class NavigationService
         // 6. E-commerce Hub
         $ecomItems = [];
 
-        if ($user->hasPermission('ecommerce.platforms.connect')) {
+        if ($hasEcommerce && $user->hasPermission('ecommerce.platforms.connect')) {
             $ecomItems[] = [
                 'title' => 'Store Connectors',
                 'route' => 'admin.ecommerce.platforms',
@@ -230,7 +243,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('ecommerce.products.sync')) {
+        if ($hasEcommerce && $user->hasPermission('ecommerce.products.sync')) {
             $ecomItems[] = [
                 'title' => 'Product Catalog & Sync',
                 'route' => 'admin.ecommerce.products',
@@ -239,7 +252,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('ecommerce.orders.sync')) {
+        if ($hasEcommerce && $user->hasPermission('ecommerce.orders.sync')) {
             $ecomItems[] = [
                 'title' => 'Orders Sync',
                 'route' => 'admin.ecommerce.orders',
@@ -248,7 +261,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('ecommerce.licenses.manage')) {
+        if ($hasEcommerce && $user->hasPermission('ecommerce.licenses.manage')) {
             $ecomItems[] = [
                 'title' => 'Plugin License Keys',
                 'route' => 'admin.ecommerce.licenses',
@@ -267,7 +280,7 @@ class NavigationService
         // 7. Organization Administration & RBAC
         $adminItems = [];
 
-        if ($user->hasPermission('roles.manage')) {
+        if ((! $owner || $hasAi) && $user->hasPermission('roles.manage')) {
             $adminItems[] = [
                 'title' => 'Roles & Permissions',
                 'route' => 'admin.roles',
@@ -276,7 +289,7 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('plugins.connect')) {
+        if ($hasAi && $user->hasPermission('plugins.connect')) {
             $adminItems[] = [
                 'title' => 'Channel Connectors',
                 'route' => 'admin.settings',

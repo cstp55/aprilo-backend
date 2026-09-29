@@ -54,6 +54,11 @@ class OnboardingTest extends TestCase
         $this->assertTrue($starterPlan['has_free_trial']);
         $this->assertEquals(499, $starterPlan['price']);
         $this->assertEquals(40000, $starterPlan['request_limit']);
+
+        $commerceProduct = collect($products)->firstWhere('slug', 'aprilo-magento-suite');
+        $this->assertSame('one_time_license', $commerceProduct['product_type']);
+        $this->assertSame('one_time', $commerceProduct['plans'][0]['billing_cycle']);
+        $this->assertStringContainsString('No recurring subscription', $commerceProduct['plans'][0]['autopay_notice']);
     }
 
     public function test_username_check_endpoint(): void
@@ -66,6 +71,31 @@ class OnboardingTest extends TestCase
             ->assertJson([
                 'available' => true,
             ]);
+    }
+
+    public function test_one_time_ecommerce_products_are_not_started_as_subscriptions(): void
+    {
+        $product = Product::where('slug', 'aprilo-magento-suite')->firstOrFail();
+        $plan = Plan::where('product_id', $product->id)->where('slug', 'single-store')->firstOrFail();
+
+        $this->postJson('/api/onboarding/initiate', [
+            'product_id' => $product->id,
+            'plan_id' => $plan->id,
+            'account' => [
+                'name' => 'Commerce Owner',
+                'username' => 'commerce_' . rand(1000, 9999),
+                'email' => 'commerce-' . rand(1000, 9999) . '@example.com',
+                'phone' => '+919876543210',
+                'password' => 'SecurePass123!',
+                'password_confirmation' => 'SecurePass123!',
+            ],
+            'organization' => [
+                'name' => 'Commerce Customer',
+                'email' => 'customer-' . rand(1000, 9999) . '@example.com',
+            ],
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'This product requires one-time license checkout. Recurring onboarding is not available for it.');
     }
 
     public function test_initiate_and_verify_onboarding_flow(): void

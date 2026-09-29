@@ -409,12 +409,10 @@
                     <div style="margin-bottom: 20px;">
                         <textarea id="deploy-script" readonly style="width: 100%; min-height: 150px; font-family: monospace; font-size: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--line); background: #fdfcf9; outline: none; line-height: 1.6;"><!-- Aprilo AI Chatbot Integration Script -->
 <script
-  src="https://cdn.aprilo.ai/widget.js"
-  data-subdomain="{{ $organization->subdomain ?: 'demo-brand' }}"
-  data-bot-name="{{ $settings->assistant_name ?: 'Aprilo Bot' }}"
-  data-color-palette="{{ $settings->chatbot_color_palette ?: '#d22630' }}"
-  data-icon="{{ $settings->chatbot_icon ?: 'robot' }}"
-  async
+    src="https://cdn.apriloinfotech.com/chat-widget/v1/widget.js"
+    data-widget-key="{{ $settings->ensureWidgetPublicKey() }}"
+    data-api-url="{{ rtrim(config('app.url'), '/') }}"
+    data-auto-open="false">
 ></script></textarea>
                     </div>
 

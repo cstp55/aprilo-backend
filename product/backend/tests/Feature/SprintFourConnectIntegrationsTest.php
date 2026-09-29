@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use App\Models\Plan;
+use App\Models\Product;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -39,6 +42,8 @@ class SprintFourConnectIntegrationsTest extends TestCase
             'organization_id' => $this->organization->id,
             'assistant_name' => 'Channel Bot',
         ]);
+
+        $this->grantAiSubscription();
     }
 
     public function test_whatsapp_use_sandbox_vs_custom_credentials(): void
@@ -153,5 +158,28 @@ class SprintFourConnectIntegrationsTest extends TestCase
         $this->assertFalse($settings->connect_whatsapp);
         $this->assertNull($settings->whatsapp_phone_number_id);
         $this->assertTrue($settings->whatsapp_use_sandbox); // defaults back to true
+    }
+
+    private function grantAiSubscription(): void
+    {
+        $product = Product::create([
+            'slug' => 'integration-ai-' . uniqid(),
+            'name' => 'Aprilo Support AI',
+            'category' => 'ai_support',
+            'product_type' => 'subscription',
+        ]);
+        $plan = Plan::create([
+            'product_id' => $product->id,
+            'slug' => 'enterprise',
+            'name' => 'Enterprise AI',
+        ]);
+
+        Subscription::create([
+            'organization_id' => $this->organization->id,
+            'product_id' => $product->id,
+            'plan_id' => $plan->id,
+            'razorpay_subscription_id' => 'integration-' . uniqid(),
+            'status' => 'active',
+        ]);
     }
 }

@@ -507,19 +507,23 @@
     </div>
     
     <div style="background: rgba(79, 70, 229, 0.06); border: 1px solid rgba(79, 70, 229, 0.15); border-radius: 8px; padding: 10px 16px; font-size: 12px;">
-        <strong>Widget Subdomain</strong>
+        <strong>Widget Organization Key</strong>
         <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">
-            <code style="font-family: monospace; color: var(--green); background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px;">{{ $organization->subdomain }}.aprilo.ai</code>
+            <code style="font-family: monospace; color: var(--green); background: rgba(0,0,0,0.05); padding: 2px 4px; border-radius: 4px;">{{ $settings->ensureWidgetPublicKey() }}</code>
         </div>
     </div>
 </div>
 
 <!-- Dynamic Tabs Bar -->
 <div class="tabs-bar">
+    @if (!$isOrganizationOwner)
     <button class="tab-btn" data-tab="overview">📊 HR Overview & Analytics</button>
+    @endif
     <button class="tab-btn" data-tab="inbox">💬 Live Chat Inbox</button>
+    @if (!$isOrganizationOwner)
     <button class="tab-btn" data-tab="crm">📇 CRM Directory</button>
     <button class="tab-btn" data-tab="staff">👥 HR Staff & Identity</button>
+    @endif
     <button class="tab-btn" data-tab="automations">🤖 AI Automations</button>
     <button class="tab-btn" data-tab="kb">📝 Knowledge Base</button>
     <button class="tab-btn" data-tab="widget">🎨 Chat Widget branding</button>
@@ -527,6 +531,7 @@
 </div>
 
 <!-- ==================== TAB 0: HR OVERVIEW & ANALYTICS ==================== -->
+@if (!$isOrganizationOwner)
 <div class="tab-pane" id="pane-overview">
     <!-- Top HR Metrics Grid -->
     <div class="grid grid-4" style="margin-bottom: 24px;">
@@ -680,6 +685,7 @@
         </div>
     </div>
 </div>
+@endif
 
 <!-- ==================== TAB 1: INBOX WORKSPACE ==================== -->
 <div class="tab-pane" id="pane-inbox">
@@ -689,7 +695,9 @@
             <div class="queue-tabs">
                 <button class="queue-btn active" id="queue-all">All Chats</button>
                 <button class="queue-btn" id="queue-ecom">🛍️ E-Commerce</button>
+                @if (!$isOrganizationOwner)
                 <button class="queue-btn" id="queue-hr">👥 HR Ops</button>
+                @endif
             </div>
             
             <div class="inbox-search-container">
@@ -767,18 +775,21 @@
                 </div>
                 
                 <!-- Card 3: Employee verification (for HR) -->
+                @if (!$isOrganizationOwner)
                 <div class="action-card" id="card-action-employee" style="display: none;">
                     <div class="action-card-title">👥 Employee Verification</div>
                     <input type="text" class="action-input" id="action-employee-id" placeholder="Enter employee ID (e.g. EMP-2026-001)">
                     <button class="action-btn" id="action-employee-btn">Verify Employee</button>
                     <div id="action-employee-output" style="font-size:11.5px; font-weight:700; margin-top:4px;"></div>
                 </div>
+                @endif
             </div>
         </div>
     </div>
 </div>
 
 <!-- ==================== TAB 2: CRM DIRECTORY ==================== -->
+@if (!$isOrganizationOwner)
 <div class="tab-pane" id="pane-crm">
     <div class="card">
         <h3 style="margin-bottom: 16px;">Customer & Employee CRM Directory</h3>
@@ -803,6 +814,7 @@
         </table>
     </div>
 </div>
+@endif
 
 <!-- ==================== TAB 3: AUTOMATIONS & AI AGENT ==================== -->
 <div class="tab-pane" id="pane-automations">
@@ -1040,8 +1052,8 @@
         </div>
         
         <div style="background: #0f172a; border-radius: 8px; padding: 18px; position:relative; overflow-x:auto;">
-            <code style="color:#38bdf8; font-family: monospace; font-size: 12.5px;">&lt;script src="http://localhost:3000/widget.js?subdomain={{ $organization->subdomain }}&api_url=http://localhost:8000/api" async defer&gt;&lt;/script&gt;</code>
-            <button class="action-btn" style="position:absolute; top:12px; right:12px; width:auto; font-size:11px; padding:4px 10px;" onclick="navigator.clipboard.writeText('&lt;script src=&quot;http://localhost:3000/widget.js?subdomain={{ $organization->subdomain }}&amp;api_url=http://localhost:8000/api&quot; async defer&gt;&lt;/script&gt;'); alert('Script snippet copied!')">Copy Snippet</button>
+            <code style="color:#38bdf8; font-family: monospace; font-size: 12.5px;">&lt;script src="https://cdn.apriloinfotech.com/chat-widget/v1/widget.js" data-widget-key="{{ $settings->ensureWidgetPublicKey() }}" data-api-url="{{ rtrim(config('app.url'), '/') }}" data-auto-open="false"&gt;&lt;/script&gt;</code>
+            <button class="action-btn" style="position:absolute; top:12px; right:12px; width:auto; font-size:11px; padding:4px 10px;" onclick="navigator.clipboard.writeText('&lt;script src=&quot;https://cdn.apriloinfotech.com/chat-widget/v1/widget.js&quot; data-widget-key=&quot;{{ $settings->ensureWidgetPublicKey() }}&quot; data-api-url=&quot;{{ rtrim(config('app.url'), '/') }}&quot; data-auto-open=&quot;false&quot;&gt;&lt;/script&gt;'); alert('Script snippet copied!')">Copy Snippet</button>
         </div>
         
         <div class="grid grid-3 border-t" style="margin-top:12px; padding-top:20px;">
@@ -1067,6 +1079,7 @@
 </div>
 
 <!-- ==================== TAB 7: HR / STAFF CARD PORTAL ==================== -->
+@if (!$isOrganizationOwner)
 <div class="tab-pane" id="pane-staff">
     <div class="grid grid-3">
         <!-- Verified ID card details -->
@@ -1157,6 +1170,7 @@
         </div>
     </div>
 </div>
+@endif
 
 <!-- Firebase Firestore Integration JavaScript -->
 <script>
@@ -1185,7 +1199,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         // Tab switching routing
         const urlParams = new URLSearchParams(window.location.search);
-        let activeTab = urlParams.get('tab') || 'overview';
+        let activeTab = urlParams.get('tab') || @json($isOrganizationOwner ? 'inbox' : 'overview');
         
         // Activate Tab buttons
         document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1244,7 +1258,10 @@
         // Queue filters
         document.getElementById('queue-all').addEventListener('click', function() { filterQueue('all', this); });
         document.getElementById('queue-ecom').addEventListener('click', function() { filterQueue('ecommerce', this); });
-        document.getElementById('queue-hr').addEventListener('click', function() { filterQueue('hr', this); });
+        const hrQueueButton = document.getElementById('queue-hr');
+        if (hrQueueButton) {
+            hrQueueButton.addEventListener('click', function() { filterQueue('hr', this); });
+        }
         
         // Search handler
         searchInput.addEventListener('input', function(e) {

@@ -17,6 +17,9 @@ Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
 Route::post('/auth/validate-employee', [AuthController::class, 'validateEmployee'])->middleware('auth:sanctum');
 
 Route::get('/widget/settings', [\App\Http\Controllers\Api\WidgetChatController::class, 'settings']);
+Route::get('/widget/config', [\App\Http\Controllers\Api\WidgetChatController::class, 'widgetConfig']);
+Route::post('/widget/conversations', [\App\Http\Controllers\Api\WidgetChatController::class, 'createConversation']);
+Route::post('/widget/conversations/{conversation}/messages', [\App\Http\Controllers\Api\WidgetChatController::class, 'createConversationMessage']);
 Route::post('/widget/chat', [\App\Http\Controllers\Api\WidgetChatController::class, 'chat']);
 Route::post('/widget/escalate', [\App\Http\Controllers\Api\WidgetChatController::class, 'escalate']);
 Route::post('/widget/inbound-email', [\App\Http\Controllers\Api\WidgetChatController::class, 'inboundEmail']);

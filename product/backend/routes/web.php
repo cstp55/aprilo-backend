@@ -38,6 +38,13 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::get('/dashboard', [SuperAdminController::class, 'dashboard'])->name('dashboard');
             Route::get('/organizations', [SuperAdminController::class, 'organizations'])->name('organizations');
             Route::post('/organizations', [SuperAdminController::class, 'storeOrganization'])->name('organizations.store');
+            Route::get('/organizations/{organization}', [SuperAdminController::class, 'organizationDetails'])->name('organizations.show');
+            Route::get('/organizations/{organization}/widget', [SuperAdminController::class, 'organizationWidget'])->name('organizations.widget');
+            Route::patch('/organizations/{organization}/widget', [SuperAdminController::class, 'updateOrganizationWidget'])->name('organizations.widget.update');
+            Route::post('/organizations/{organization}/widget/rotate-key', [SuperAdminController::class, 'rotateOrganizationWidgetKey'])->name('organizations.widget.rotate-key');
+            Route::get('/organizations/{organization}/knowledge', [SuperAdminController::class, 'organizationKnowledge'])->name('organizations.knowledge');
+            Route::post('/organizations/{organization}/knowledge', [SuperAdminController::class, 'storeOrganizationKnowledge'])->name('organizations.knowledge.store');
+            Route::patch('/organizations/{organization}/owners/{user}/credentials', [SuperAdminController::class, 'updateOwnerCredentials'])->name('organizations.owners.credentials');
             Route::patch('/organizations/{organization}', [SuperAdminController::class, 'updateOrgStatus'])->name('organizations.update');
             Route::get('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'subscriptionAccess'])->name('organizations.subscriptions');
             Route::post('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'grantSubscription'])->name('organizations.subscriptions.store');

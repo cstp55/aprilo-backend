@@ -130,7 +130,7 @@ class ProductsAndPlansSeeder extends Seeder
             [
                 'name' => 'Aprilo Commerce for Magento 2',
                 'category' => 'ecommerce',
-                'product_type' => 'subscription',
+                'product_type' => 'one_time_license',
                 'platform' => 'magento',
                 'short_description' => 'Full AI catalog search, vector embeddings, and real-time order tracking module for Adobe Commerce / Magento 2.',
                 'description' => 'Turn your Magento 2 store into an intelligent conversational shopping experience. Generates semantic embeddings for your entire catalog and syncs orders automatically.',
@@ -155,7 +155,7 @@ class ProductsAndPlansSeeder extends Seeder
             ['product_id' => $magentoSuite->id, 'slug' => 'single-store'],
             [
                 'name' => 'Single Store License',
-                'billing_cycle' => 'monthly',
+                'billing_cycle' => 'one_time',
                 'price' => 1999.00,
                 'currency' => 'INR',
                 'trial_period_days' => 0, // No trial for e-commerce plugin
@@ -179,7 +179,7 @@ class ProductsAndPlansSeeder extends Seeder
             [
                 'name' => 'Aprilo Commerce for Shopify',
                 'category' => 'ecommerce',
-                'product_type' => 'subscription',
+                'product_type' => 'one_time_license',
                 'platform' => 'shopify',
                 'short_description' => 'Automated Shopify AI Sales & Support bot that answers customer queries and tracks order status.',
                 'description' => 'Empower your Shopify store with an intelligent assistant that recommends products and pulls real-time tracking numbers directly from Shopify Admin API.',
@@ -203,7 +203,7 @@ class ProductsAndPlansSeeder extends Seeder
             ['product_id' => $shopifyApp->id, 'slug' => 'standard'],
             [
                 'name' => 'Standard Shopify Store',
-                'billing_cycle' => 'monthly',
+                'billing_cycle' => 'one_time',
                 'price' => 999.00,
                 'currency' => 'INR',
                 'trial_period_days' => 14,

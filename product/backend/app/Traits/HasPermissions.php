@@ -44,12 +44,12 @@ trait HasPermissions
 
     public function isHrAdmin(): bool
     {
-        return in_array($this->role_slug, ['hr_admin', 'owner', 'super_admin'], true);
+        return in_array($this->role_slug, ['hr_admin', 'super_admin'], true);
     }
 
     public function isEcommerceAdmin(): bool
     {
-        return in_array($this->role_slug, ['ecommerce_admin', 'owner', 'super_admin'], true);
+        return in_array($this->role_slug, ['ecommerce_admin', 'super_admin'], true);
     }
 
     public function hasPermission(string $permissionSlug): bool
@@ -59,9 +59,26 @@ trait HasPermissions
             return true;
         }
 
-        // Organization owners have full access within their own tenant.
-        if (($this->attributes['role'] ?? null) === 'owner') {
-            return true;
+        // Organization owners are limited to products currently licensed by their tenant.
+        if ($this->role_slug === 'owner') {
+            if (str_starts_with($permissionSlug, 'ecommerce.')) {
+                return $this->organization?->hasActiveProductCategory('ecommerce') ?? false;
+            }
+
+            if (str_starts_with($permissionSlug, 'employee.') || str_starts_with($permissionSlug, 'hr.')) {
+                return false;
+            }
+
+            if (str_starts_with($permissionSlug, 'billing.')) {
+                return true;
+            }
+
+            if (str_starts_with($permissionSlug, 'dashboard.')) {
+                return $this->organization?->hasActiveProductCategory('ai_support')
+                    || $this->organization?->hasActiveProductCategory('ecommerce');
+            }
+
+            return $this->organization?->hasActiveProductCategory('ai_support') ?? false;
         }
 
         // 2. Check assigned Role permissions
@@ -72,7 +89,7 @@ trait HasPermissions
         // 3. Fallback compatibility with legacy role strings if role_id not linked
         $legacyRole = $this->attributes['role'] ?? 'employee';
 
-        if (in_array($legacyRole, ['owner', 'hr_admin'], true)) {
+        if ($legacyRole === 'hr_admin') {
             // HR Admins have core & HR permissions by default
             return str_starts_with($permissionSlug, 'core.')
                 || str_starts_with($permissionSlug, 'hr.')

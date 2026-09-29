@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessKnowledgeSource;
 use App\Models\Invoice;
 use App\Models\AuditEvent;
+use App\Models\KnowledgeSource;
 use App\Models\Organization;
 use App\Models\OrganizationEntitlement;
 use App\Models\OrganizationSetting;
@@ -18,6 +20,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -112,6 +115,204 @@ class SuperAdminController extends Controller
         return view('admin.super.organizations', compact('organizations'));
     }
 
+    public function organizationDetails(Request $request, Organization $organization): View
+    {
+        $this->authorizeSuperAdmin($request);
+
+        $owners = $organization->users()
+            ->with('roleModel')
+            ->get()
+            ->filter(fn (User $user): bool => $user->role_slug === 'owner')
+            ->values();
+
+        return view('admin.super.organization-details', compact('organization', 'owners'));
+    }
+
+    public function organizationWidget(Request $request, Organization $organization): View
+    {
+        $this->authorizeSuperAdmin($request);
+        $settings = OrganizationSetting::firstOrCreate(
+            ['organization_id' => $organization->id],
+            [
+                'assistant_name' => $organization->name . ' Assistant',
+                'assistant_status' => 'active',
+                'chatbot_color_palette' => '#d22630',
+                'chatbot_icon' => 'robot',
+            ]
+        );
+        $widgetKey = $settings->ensureWidgetPublicKey();
+        $apiUrl = rtrim((string) config('app.url'), '/');
+
+        return view('admin.super.organization-widget', compact('organization', 'settings', 'widgetKey', 'apiUrl'));
+    }
+
+    public function updateOrganizationWidget(Request $request, Organization $organization): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        $settings = OrganizationSetting::firstOrCreate(['organization_id' => $organization->id]);
+        $validated = $request->validate([
+            'assistant_name' => ['required', 'string', 'max:255'],
+            'assistant_status' => ['required', Rule::in(['active', 'paused'])],
+            'chatbot_color_palette' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'chatbot_icon' => ['required', Rule::in(['robot', 'support', 'star', 'chat'])],
+            'live_chat_enabled' => ['nullable', 'boolean'],
+        ]);
+
+        $validated['live_chat_enabled'] = $request->boolean('live_chat_enabled');
+        $settings->update($validated);
+
+        AuditEvent::create([
+            'organization_id' => $organization->id,
+            'actor_user_id' => $request->user()->id,
+            'event_type' => 'ORGANIZATION_WIDGET_SETTINGS_UPDATED',
+            'entity_type' => 'organization_setting',
+            'entity_id' => $settings->id,
+            'metadata' => [
+                'assistant_name' => $settings->assistant_name,
+                'assistant_status' => $settings->assistant_status,
+                'chatbot_color_palette' => $settings->chatbot_color_palette,
+                'chatbot_icon' => $settings->chatbot_icon,
+                'live_chat_enabled' => $settings->live_chat_enabled,
+            ],
+        ]);
+
+        return redirect()->route('admin.super.organizations.widget', $organization)
+            ->with('status', 'Widget settings updated for ' . $organization->name . '.');
+    }
+
+    public function rotateOrganizationWidgetKey(Request $request, Organization $organization): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        $settings = OrganizationSetting::where('organization_id', $organization->id)->firstOrFail();
+        $environment = app()->environment('production') ? 'live' : 'test';
+        $settings->update(['public_widget_key' => 'pk_' . $environment . '_' . Str::random(32)]);
+
+        AuditEvent::create([
+            'organization_id' => $organization->id,
+            'actor_user_id' => $request->user()->id,
+            'event_type' => 'ORGANIZATION_WIDGET_KEY_ROTATED',
+            'entity_type' => 'organization_setting',
+            'entity_id' => $settings->id,
+            'metadata' => ['environment' => $environment],
+        ]);
+
+        return redirect()->route('admin.super.organizations.widget', $organization)
+            ->with('status', 'The widget public key was rotated. Update the embed on the customer website.');
+    }
+
+    public function organizationKnowledge(Request $request, Organization $organization): View
+    {
+        $this->authorizeSuperAdmin($request);
+        $sources = $organization->knowledgeSources()->withCount('chunks')->latest()->get();
+
+        return view('admin.super.organization-knowledge', compact('organization', 'sources'));
+    }
+
+    public function storeOrganizationKnowledge(Request $request, Organization $organization): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'access_scope' => ['required', Rule::in(['all_employees', 'hr_only'])],
+            'file' => ['required', 'file', 'max:10240'],
+        ]);
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+        $sourceType = $extension === 'md' ? 'markdown' : $extension;
+        if (! in_array($sourceType, ['pdf', 'docx', 'txt', 'markdown'], true)) {
+            return back()->withErrors(['file' => 'Only PDF, DOCX, TXT, and Markdown files are supported.'])->withInput();
+        }
+
+        $source = KnowledgeSource::create([
+            'organization_id' => $organization->id,
+            'title' => $validated['title'],
+            'source_type' => $sourceType,
+            'file_path' => $file->store('knowledge-sources'),
+            'status' => 'uploaded',
+            'access_scope' => $validated['access_scope'],
+            'uploaded_by' => $request->user()->id,
+            'metadata' => [
+                'original_name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+                'uploaded_by_super_admin' => true,
+            ],
+        ]);
+
+        if (App::environment(['local', 'testing'])) {
+            ProcessKnowledgeSource::dispatchSync($source->id);
+        } else {
+            ProcessKnowledgeSource::dispatch($source->id);
+        }
+
+        AuditEvent::create([
+            'organization_id' => $organization->id,
+            'actor_user_id' => $request->user()->id,
+            'event_type' => 'ORGANIZATION_KNOWLEDGE_SOURCE_UPLOADED',
+            'entity_type' => 'knowledge_source',
+            'entity_id' => $source->id,
+            'metadata' => ['title' => $source->title, 'source_type' => $sourceType],
+        ]);
+
+        return redirect()->route('admin.super.organizations.knowledge', $organization)
+            ->with('status', 'Knowledge source uploaded for ' . $organization->name . '.');
+    }
+
+    public function updateOwnerCredentials(Request $request, Organization $organization, User $user): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        abort_unless($user->organization_id === $organization->id && $user->role_slug === 'owner', 404);
+
+        $validated = $request->validate([
+            'username' => [
+                'nullable', 'required_without_all:email,password', 'string', 'min:3', 'max:30',
+                'regex:/^[a-zA-Z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id),
+            ],
+            'email' => [
+                'nullable', 'required_without_all:username,password', 'email', 'max:255',
+                Rule::unique('users', 'email')->ignore($user->id),
+            ],
+            'password' => ['nullable', 'required_without_all:username,email', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $updates = [];
+        $changedFields = [];
+
+        if (filled($validated['username'] ?? null) && strtolower($validated['username']) !== strtolower((string) $user->username)) {
+            $updates['username'] = strtolower($validated['username']);
+            $changedFields[] = 'username';
+        }
+
+        if (filled($validated['email'] ?? null) && strtolower($validated['email']) !== strtolower($user->email)) {
+            $updates['email'] = strtolower($validated['email']);
+            $updates['email_verified_at'] = null;
+            $changedFields[] = 'email';
+        }
+
+        if (filled($validated['password'] ?? null)) {
+            $updates['password'] = Hash::make($validated['password']);
+            $changedFields[] = 'password';
+        }
+
+        if (empty($updates)) {
+            return back()->withErrors(['credentials' => 'Enter a new username, email, or password.'])->withInput();
+        }
+
+        $user->forceFill($updates)->save();
+
+        AuditEvent::create([
+            'organization_id' => $organization->id,
+            'actor_user_id' => $request->user()->id,
+            'event_type' => 'ORGANIZATION_OWNER_CREDENTIALS_UPDATED',
+            'entity_type' => 'user',
+            'entity_id' => $user->id,
+            'metadata' => ['updated_fields' => $changedFields],
+        ]);
+
+        return redirect()->route('admin.super.organizations.show', $organization)
+            ->with('status', 'Organization owner credentials updated.');
+    }
+
     public function storeOrganization(Request $request): RedirectResponse
     {
         $this->authorizeSuperAdmin($request);
@@ -119,6 +320,11 @@ class SuperAdminController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
+            'website' => ['nullable', 'string', 'max:190'],
+            'country' => ['nullable', 'string', 'max:100'],
+            'industry' => ['nullable', 'string', 'max:100'],
+            'team_size' => ['nullable', 'string', 'max:50'],
+            'timezone' => ['nullable', 'string', 'max:80'],
             'owner_name' => ['required', 'string', 'max:255'],
             'owner_username' => ['required', 'string', 'min:3', 'max:30', 'regex:/^[a-zA-Z0-9_.-]+$/', 'unique:users,username'],
             'owner_email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -130,6 +336,11 @@ class SuperAdminController extends Controller
             $organization = Organization::create([
                 'name' => $validated['name'],
                 'email' => $validated['email'],
+                'website' => $validated['website'] ?? null,
+                'country' => $validated['country'] ?? null,
+                'industry' => $validated['industry'] ?? null,
+                'team_size' => $validated['team_size'] ?? null,
+                'timezone' => $validated['timezone'] ?? null,
                 'status' => $validated['status'],
             ]);
 

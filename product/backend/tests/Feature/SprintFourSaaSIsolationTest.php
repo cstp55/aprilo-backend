@@ -6,6 +6,9 @@ use App\Models\KnowledgeChunk;
 use App\Models\KnowledgeSource;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use App\Models\Plan;
+use App\Models\Product;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -15,6 +18,115 @@ use Tests\TestCase;
 class SprintFourSaaSIsolationTest extends TestCase
 {
     use DatabaseTransactions;
+
+    public function test_published_widget_contract_resolves_public_key_and_scopes_conversations(): void
+    {
+        $organizationA = Organization::create(['name' => 'Widget Tenant A']);
+        $organizationB = Organization::create(['name' => 'Widget Tenant B']);
+        $settingsA = OrganizationSetting::create([
+            'organization_id' => $organizationA->id,
+            'assistant_name' => 'Tenant A Assistant',
+        ]);
+        $settingsB = OrganizationSetting::create([
+            'organization_id' => $organizationB->id,
+            'assistant_name' => 'Tenant B Assistant',
+        ]);
+        $this->grantAiSubscription($organizationA, 'widget-a');
+        $this->grantAiSubscription($organizationB, 'widget-b');
+        $owner = User::create([
+            'organization_id' => $organizationA->id,
+            'name' => 'Widget Owner',
+            'email' => 'widget-owner@example.com',
+            'password' => bcrypt('password'),
+            'role' => 'owner',
+            'status' => 'active',
+        ]);
+
+        $keyA = $settingsA->ensureWidgetPublicKey();
+        $keyB = $settingsB->ensureWidgetPublicKey();
+        $this->assertStringStartsWith('pk_test_', $keyA);
+        $this->assertNotSame($keyA, $keyB);
+
+        $this->getJson('/api/widget/config?widget_key=' . $keyA)
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('organization.id', $organizationA->id)
+            ->assertJsonPath('ai.display_name', 'Tenant A Assistant');
+
+        $this->getJson('/api/widget/config?widget_key=' . $keyB)
+            ->assertOk()
+            ->assertJsonPath('organization.id', $organizationB->id)
+            ->assertJsonPath('ai.display_name', 'Tenant B Assistant');
+
+        $this->getJson('/api/widget/config')->assertStatus(400);
+        $this->getJson('/api/widget/config?widget_key=' . $organizationA->id)->assertNotFound();
+        $this->getJson('/api/widget/config?widget_key=pk_live_unknown')->assertNotFound();
+
+        $this->postJson('/api/widget/conversations', [
+            'widget_key' => $keyA,
+            'session_id' => 'session-widget-test',
+            'domain' => 'tenant-a.example.com',
+            'page_url' => 'https://tenant-a.example.com/help',
+            'page_title' => 'Help',
+        ])->assertCreated()->assertJsonPath('success', true);
+
+        $conversationId = $this->postJson('/api/widget/conversations', [
+            'widget_key' => $keyA,
+            'session_id' => 'session-widget-message',
+        ])->assertCreated()->json('conversation_id');
+
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'generateContent')) {
+                return Http::response([
+                    'candidates' => [[
+                        'content' => ['parts' => [['text' => 'Tenant A allows returns within 30 days.']]],
+                    ]],
+                ], 200);
+            }
+
+            return Http::response(['embedding' => ['values' => array_fill(0, 1536, 0.15)]], 200);
+        });
+
+        $this->postJson('/api/widget/conversations/' . $conversationId . '/messages', [
+            'message' => 'What is the return policy?',
+            'message_type' => 'text',
+        ])
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('reply.sender', 'assistant');
+
+        $this->assertDatabaseHas('widget_conversations', [
+            'organization_id' => $organizationA->id,
+            'session_id' => 'session-widget-test',
+        ]);
+        $this->assertDatabaseHas('widget_conversation_messages', [
+            'conversation_id' => $conversationId,
+            'sender_type' => 'assistant',
+        ]);
+        $this->assertSame($organizationA->id, $owner->organization_id);
+    }
+
+    private function grantAiSubscription(Organization $organization, string $prefix): void
+    {
+        $product = Product::create([
+            'slug' => $prefix . '-ai',
+            'name' => 'Aprilo Support AI',
+            'category' => 'ai_support',
+            'product_type' => 'subscription',
+        ]);
+        $plan = Plan::create([
+            'product_id' => $product->id,
+            'slug' => 'monthly',
+            'name' => 'Monthly AI',
+        ]);
+        Subscription::create([
+            'organization_id' => $organization->id,
+            'product_id' => $product->id,
+            'plan_id' => $plan->id,
+            'razorpay_subscription_id' => $prefix . '-subscription',
+            'status' => 'active',
+        ]);
+    }
 
     public function test_settings_chat_preview_and_saas_tenant_isolation(): void
     {

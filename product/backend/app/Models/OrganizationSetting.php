@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class OrganizationSetting extends Model
 {
@@ -12,6 +13,7 @@ class OrganizationSetting extends Model
 
     protected $fillable = [
         'organization_id',
+        'public_widget_key',
         'live_chat_enabled',
         'max_support_agents',
         'minutes_saved_per_resolved_question',
@@ -115,5 +117,17 @@ class OrganizationSetting extends Model
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function ensureWidgetPublicKey(): string
+    {
+        if (blank($this->public_widget_key)) {
+            $environment = app()->environment('production') ? 'live' : 'test';
+            $this->forceFill([
+                'public_widget_key' => 'pk_' . $environment . '_' . Str::random(32),
+            ])->save();
+        }
+
+        return $this->public_widget_key;
     }
 }

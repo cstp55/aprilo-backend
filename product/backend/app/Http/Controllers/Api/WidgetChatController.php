@@ -11,6 +11,8 @@ use App\Models\KnowledgeChunk;
 use App\Models\Organization;
 use App\Models\Question;
 use App\Models\User;
+use App\Models\WidgetConversation;
+use App\Models\WidgetConversationMessage;
 use App\Services\AI\AiAnswerService;
 use App\Services\AI\SensitivityClassifier;
 use Illuminate\Http\JsonResponse;
@@ -24,8 +26,128 @@ class WidgetChatController extends Controller
     public function __construct(private readonly AiAnswerService $aiService)
     {
     }
+
+    public function widgetConfig(Request $request): JsonResponse
+    {
+        $organization = $this->resolveOrg($request);
+        $settings = $organization->settings;
+        $primaryColor = $settings?->chatbot_color_palette ?: '#d22630';
+
+        return response()->json([
+            'success' => true,
+            'widget' => [
+                'id' => $settings?->ensureWidgetPublicKey(),
+                'name' => $settings?->assistant_name ?: 'Aprilo Bot',
+                'display_name' => $settings?->assistant_name ?: 'Aprilo Bot',
+                'avatar_url' => '',
+                'welcome_message' => 'Hi! How can we help you today?',
+                'offline_message' => 'Our team is currently offline. Please leave a message.',
+                'position' => 'bottom-right',
+                'enabled' => true,
+            ],
+            'theme' => [
+                'primary_color' => $primaryColor,
+                'secondary_color' => '#ff8a00',
+                'background_color' => '#f8fafc',
+                'text_color' => '#1f2937',
+                'border_radius' => '16px',
+            ],
+            'behavior' => [
+                'auto_open' => false,
+                'show_launcher' => true,
+                'show_branding' => true,
+                'human_support_enabled' => (bool) ($settings?->live_chat_enabled ?? true),
+            ],
+            'ai' => [
+                'enabled' => true,
+                'display_name' => $settings?->assistant_name ?: 'Aprilo Bot',
+            ],
+            'support' => [
+                'enabled' => true,
+                'business_hours_enabled' => false,
+                'is_online' => ($settings?->assistant_status ?? 'active') === 'active',
+            ],
+            'quick_actions' => [],
+            'organization' => [
+                'id' => $organization->id,
+                'name' => $organization->name,
+            ],
+        ]);
+    }
+
+    public function createConversation(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'widget_key' => ['required', 'string', 'max:64'],
+            'session_id' => ['required', 'string', 'max:120'],
+            'domain' => ['nullable', 'string', 'max:255'],
+            'page_url' => ['nullable', 'url', 'max:2048'],
+            'page_title' => ['nullable', 'string', 'max:255'],
+        ]);
+        $organization = $this->resolveOrg($request);
+        $customerId = (string) Str::uuid();
+
+        $conversation = WidgetConversation::create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customerId,
+            'session_id' => $validated['session_id'],
+            'domain' => $validated['domain'] ?? null,
+            'page_url' => $validated['page_url'] ?? null,
+            'page_title' => $validated['page_title'] ?? null,
+            'mode' => 'ai',
+            'status' => 'open',
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'conversation_id' => $conversation->id,
+            'customer_id' => $customerId,
+            'mode' => $conversation->mode,
+        ], 201);
+    }
+
+    public function createConversationMessage(Request $request, WidgetConversation $conversation): JsonResponse
+    {
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:2000'],
+            'message_type' => ['nullable', 'string', 'max:30'],
+            'metadata' => ['nullable', 'array'],
+        ]);
+
+        abort_unless($conversation->status === 'open', 404);
+
+        $organization = $conversation->organization;
+        abort_unless($organization?->hasActiveProductCategory('ai_support'), 403);
+
+        $conversation->messages()->create([
+            'sender_type' => 'user',
+            'message_type' => $validated['message_type'] ?? 'text',
+            'content' => $validated['message'],
+            'metadata' => $validated['metadata'] ?? null,
+        ]);
+
+        $result = $this->processQueryForOrg($organization, $validated['message']);
+        $reply = $conversation->messages()->create([
+            'sender_type' => 'assistant',
+            'message_type' => 'text',
+            'content' => $result['answer_text'],
+            'sender_name' => $organization->settings?->assistant_name ?: 'Aprilo Bot',
+            'metadata' => ['answer_status' => $result['answer_status']],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'mode' => $conversation->mode,
+            'reply' => [
+                'id' => $reply->id,
+                'sender' => 'assistant',
+                'content' => $reply->content,
+                'timestamp' => $reply->created_at->toIso8601String(),
+            ],
+        ]);
+    }
     /**
-     * Fetch custom widget branding settings based on subdomain.
+    * Fetch tenant widget settings using the public organization key.
      */
     public function settings(Request $request): JsonResponse
     {
@@ -347,34 +469,25 @@ class WidgetChatController extends Controller
     }
 
     /**
-     * Resolves the current organization based on subdomain parameter.
+    * Resolve exactly one organization from the key embedded in the widget.
      */
     private function resolveOrg(Request $request): Organization
     {
-        $subdomain = $request->input('subdomain');
-        
-        if ($subdomain) {
-            // Find organization where name slug matches subdomain
-            $org = Organization::all()->first(function ($o) use ($subdomain) {
-                return strtolower(str_replace(' ', '-', $o->name)) === strtolower($subdomain);
-            });
-            if ($org) {
-                return $org;
-            }
+        $widgetKey = $request->input('widget_key')
+            ?? $request->query('widget_key')
+            ?? $request->header('X-Widget-Key');
 
-            // Fallback like search
-            $org = Organization::where('name', 'like', '%' . str_replace('-', ' ', $subdomain) . '%')->first();
-            if ($org) {
-                return $org;
-            }
-        }
+        abort_unless(is_string($widgetKey) && $widgetKey !== '', 400, 'A widget_key is required.');
 
-        // Fallback to first organization if not matched (ensures dev env never breaks)
-        return Organization::first() ?? Organization::create([
-            'name' => 'Demo Company',
-            'status' => 'active',
-            'plan' => 'basic'
-        ]);
+        $settings = \App\Models\OrganizationSetting::query()
+            ->where('public_widget_key', $widgetKey)
+            ->firstOrFail();
+        $organization = $settings->organization;
+
+        abort_unless($organization?->status === 'active', 403, 'This organization is inactive.');
+        abort_unless($organization->hasActiveProductCategory('ai_support'), 403, 'Aprilo Support AI is not active for this organization.');
+
+        return $organization;
     }
 
     /**

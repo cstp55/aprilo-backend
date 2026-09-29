@@ -19,11 +19,25 @@ use Illuminate\View\View;
 
 class AdminConsoleController extends Controller
 {
-    public function dashboard(Request $request, MetricsService $metrics): View
+    public function dashboard(Request $request, MetricsService $metrics): View|RedirectResponse
     {
-        $this->authorizeAdmin($request);
+        if ($request->user()->isSuperAdmin()) {
+            return redirect()->route('admin.super.dashboard');
+        }
 
         $organization = $request->user()->organization;
+
+        if ($request->user()->role_slug === 'owner'
+            && ! $organization?->hasActiveProductCategory('ai_support')
+            && $organization?->hasActiveProductCategory('ecommerce')) {
+            return redirect()->route('admin.ecommerce.dashboard');
+        }
+
+        if ($request->user()->role_slug === 'owner' && ! $organization?->hasActiveProductCategory('ai_support')) {
+            return redirect()->route('admin.settings.pricing');
+        }
+
+        $this->authorizeAdmin($request);
 
         $settings = OrganizationSetting::firstOrCreate(
             ['organization_id' => $organization->id],
@@ -84,6 +98,11 @@ class AdminConsoleController extends Controller
             'wfhRequests' => $wfhRequests,
             'employees' => $employees,
             'idcards' => $idcards,
+            'activeProductCategories' => collect(['ai_support', 'ecommerce'])
+                ->filter(fn (string $category): bool => $organization->hasActiveProductCategory($category))
+                ->values()
+                ->all(),
+            'isOrganizationOwner' => $request->user()->role_slug === 'owner',
         ]);
     }
 
@@ -924,8 +943,18 @@ class AdminConsoleController extends Controller
     {
         $user = $request->user();
 
+        if ($user?->role_slug === 'owner') {
+            if ($request->routeIs('admin.leaves*', 'admin.wfh*', 'admin.employees*', 'admin.idcards*')) {
+                abort_unless($user->organization?->hasActiveProductCategory('ai_support'), 403);
+            }
+
+            if ($request->routeIs('admin.sources*', 'admin.settings.agent', 'admin.settings.design', 'admin.settings.deploy', 'admin.settings.connect*', 'admin.escalations*', 'admin.logs*', 'admin.chat*')) {
+                abort_unless($user->organization?->hasActiveProductCategory('ai_support'), 403);
+            }
+        }
+
         abort_unless(
-            $user && ($user->isSuperAdmin() || $user->isHrAdmin() || $user->isEcommerceAdmin() || $user->hasPermission('dashboard.view')),
+            $user && ($user->isSuperAdmin() || $user->role_slug === 'owner' || $user->isHrAdmin() || $user->isEcommerceAdmin() || $user->hasPermission('dashboard.view')),
             403,
             'Admin access is required.'
         );

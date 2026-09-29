@@ -14,7 +14,7 @@ class AdminAuthController extends Controller
     public function showLogin(Request $request): View|RedirectResponse
     {
         if ($request->user() && $this->isAdmin($request->user()->role)) {
-            return redirect()->route('admin.dashboard');
+            return $this->dashboardRoute($request);
         }
 
         return view('admin.login');
@@ -45,11 +45,7 @@ class AdminAuthController extends Controller
             ])->onlyInput('email');
         }
 
-        if ($request->user()->role === UserRole::HrAdmin->value) {
-            return redirect()->intended(route('admin.leaves'));
-        }
-
-        return redirect()->intended(route('admin.dashboard'));
+        return $this->dashboardRoute($request, true);
     }
 
     public function logout(Request $request): RedirectResponse
@@ -64,5 +60,17 @@ class AdminAuthController extends Controller
     private function isAdmin(string $role): bool
     {
         return in_array($role, [UserRole::Owner->value, UserRole::HrAdmin->value, 'super_admin'], true);
+    }
+
+    private function dashboardRoute(Request $request, bool $intended = false): RedirectResponse
+    {
+        $user = $request->user();
+        $route = $user->isSuperAdmin()
+            ? 'admin.super.dashboard'
+            : ($user->role_slug === UserRole::HrAdmin->value ? 'admin.leaves' : 'admin.dashboard');
+
+        return $intended
+            ? redirect()->intended(route($route))
+            : redirect()->route($route);
     }
 }

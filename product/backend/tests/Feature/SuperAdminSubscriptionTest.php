@@ -86,9 +86,9 @@ class SuperAdminSubscriptionTest extends TestCase
             'status' => 'active',
         ]);
 
-        $this->actingAs($owner)->get('/admin')->assertOk();
+        $this->actingAs($owner)->get('/admin')->assertRedirect(route('admin.settings.pricing'));
         $this->actingAs($owner)->get('/admin/super/organizations')->assertForbidden();
-        $this->assertTrue($owner->fresh()->hasPermission('platform.anything')); 
+        $this->assertFalse($owner->fresh()->hasPermission('platform.anything'));
     }
 
     public function test_super_admin_can_open_agent_management_for_a_selected_organization(): void

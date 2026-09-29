@@ -545,7 +545,7 @@
                                 </a>
                             @endforeach
                         </div>
-                    @else
+                    @elseif (auth()->user()->role_slug !== 'owner' || auth()->user()->organization?->hasActiveProductCategory('ai_support'))
                         <a class="{{ request()->routeIs('admin.agents*') ? 'active' : '' }}" href="{{ route('admin.agents') }}">
                             Live Chat Agents
                         </a>

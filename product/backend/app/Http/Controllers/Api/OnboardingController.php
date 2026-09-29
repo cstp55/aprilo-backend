@@ -58,7 +58,7 @@ class OnboardingController extends Controller
                 'best_seller' => $product->best_seller,
                 'features' => $product->features ?? [],
                 'metadata' => $product->metadata ?? [],
-                'plans' => $product->plans->map(function ($plan) {
+                'plans' => $product->plans->map(function ($plan) use ($product) {
                     return [
                         'id' => $plan->id,
                         'slug' => $plan->slug,
@@ -72,9 +72,11 @@ class OnboardingController extends Controller
                         'is_popular' => $plan->is_popular,
                         'features' => $plan->features ?? [],
                         'metadata' => $plan->metadata ?? [],
-                        'autopay_notice' => $plan->trial_period_days > 0 
-                            ? "Includes a 1-month ({$plan->trial_period_days}-day) 100% free trial. An AutoPay recurring mandate will begin after the trial ends unless cancelled."
-                            : "Standard recurring subscription.",
+                        'autopay_notice' => $product->product_type === 'one_time_license'
+                            ? 'One-time license purchase. No recurring subscription or AutoPay mandate.'
+                            : ($plan->trial_period_days > 0
+                                ? "Includes a {$plan->trial_period_days}-day free trial. An AutoPay recurring mandate will begin after the trial ends unless cancelled."
+                                : 'Standard recurring subscription.'),
                     ];
                 }),
             ];
@@ -147,8 +149,6 @@ class OnboardingController extends Controller
             'organization.team_size' => ['nullable', 'string', 'max:50'],
             'organization.timezone' => ['nullable', 'string', 'max:80'],
 
-            // AutoPay Consent
-            'autopay_consent' => ['required', 'accepted'],
         ]);
 
         if ($validator->fails()) {
@@ -166,6 +166,20 @@ class OnboardingController extends Controller
             ->where('id', $request->input('plan_id'))
             ->where('is_active', true)
             ->firstOrFail();
+
+        if ($product->product_type === 'one_time_license') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This product requires one-time license checkout. Recurring onboarding is not available for it.',
+            ], 422);
+        }
+
+        if (! $request->boolean('autopay_consent')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'AutoPay consent is required for subscription plans.',
+            ], 422);
+        }
 
         if (! $this->razorpayService->isMockMode() && blank($plan->razorpay_plan_id)) {
             return response()->json([

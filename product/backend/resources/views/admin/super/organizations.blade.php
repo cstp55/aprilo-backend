@@ -19,6 +19,11 @@
             <div class="grid grid-3">
                 <label class="field">Organization name<input name="name" value="{{ old('name') }}" required></label>
                 <label class="field">Organization email<input name="email" type="email" value="{{ old('email') }}" required></label>
+                <label class="field">Website<input name="website" type="url" value="{{ old('website') }}"></label>
+                <label class="field">Country<input name="country" value="{{ old('country') }}"></label>
+                <label class="field">Industry<input name="industry" value="{{ old('industry') }}"></label>
+                <label class="field">Team size<input name="team_size" value="{{ old('team_size') }}"></label>
+                <label class="field">Timezone<input name="timezone" value="{{ old('timezone') }}"></label>
                 <label class="field">Organization status<select name="status" required><option value="active">Active</option><option value="trial">Trial</option><option value="suspended">Suspended</option></select></label>
                 <label class="field">Owner full name<input name="owner_name" value="{{ old('owner_name') }}" required></label>
                 <label class="field">Owner username<input name="owner_username" value="{{ old('owner_username') }}" required></label>
@@ -58,6 +63,7 @@
                         </span>
                     </td>
                     <td>
+                        <a class="button" style="display: inline-block; width: auto; padding: 8px 12px; font-size: 12px; margin-bottom: 6px;" href="{{ route('admin.super.organizations.show', $org) }}">View details</a>
                         <a class="button" style="display: inline-block; width: auto; padding: 8px 12px; font-size: 12px;" href="{{ route('admin.super.organizations.subscriptions', $org) }}">Manage access</a>
                     </td>
                     <td>{{ $org->created_at ? $org->created_at->format('M d, Y') : 'N/A' }}</td>

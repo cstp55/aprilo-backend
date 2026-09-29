@@ -97,6 +97,33 @@ class Organization extends Model
         return false;
     }
 
+    public function hasActiveProductCategory(string $category): bool
+    {
+        if ($category === 'ecommerce') {
+            return $this->ecommerceLicenses()
+                ->where('status', 'active')
+                ->where(function ($query): void {
+                    $query->whereNull('expires_at')->orWhere('expires_at', '>=', now());
+                })
+                ->exists();
+        }
+
+        $hasSubscription = $this->subscriptions()
+            ->whereIn('status', ['trialing', 'active'])
+            ->whereHas('product', fn ($query) => $query->where('category', $category))
+            ->where(function ($query): void {
+                $query->whereNull('current_cycle_end')->orWhere('current_cycle_end', '>=', now());
+            })
+            ->where(function ($query): void {
+                $query->where('status', '!=', 'trialing')
+                    ->orWhereNull('trial_end')
+                    ->orWhere('trial_end', '>=', now());
+            })
+            ->exists();
+
+        return $hasSubscription;
+    }
+
     public function supportsLiveChatAgents(): bool
     {
         $settings = $this->settings;

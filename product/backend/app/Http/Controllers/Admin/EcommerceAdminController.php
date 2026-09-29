@@ -233,8 +233,14 @@ class EcommerceAdminController extends Controller
 
     private function authorizeEcommerce(Request $request): void
     {
+        $user = $request->user();
+
+        if ($user?->role_slug === 'owner') {
+            abort_unless($user->organization?->hasActiveProductCategory('ecommerce'), 403);
+        }
+
         abort_unless(
-            $request->user() && ($request->user()->hasPermission('ecommerce.dashboard.view') || $request->user()->isEcommerceAdmin()),
+            $user && ($user->hasPermission('ecommerce.dashboard.view') || $user->isEcommerceAdmin()),
             403,
             'E-commerce Administrator access is required.'
         );

@@ -5,7 +5,10 @@ namespace Tests\Feature;
 use App\Models\Escalation;
 use App\Models\Organization;
 use App\Models\OrganizationSetting;
+use App\Models\Plan;
+use App\Models\Product;
 use App\Models\Question;
+use App\Models\Subscription;
 use App\Models\User;
 use App\Enums\UserRole;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
@@ -87,6 +90,25 @@ class SprintFourTeamsEscalationTest extends TestCase
             'role' => 'employee',
             'status' => 'active',
             'teams_user_id' => 'employee-teams-id',
+        ]);
+
+        $product = Product::create([
+            'slug' => 'teams-ai-' . uniqid(),
+            'name' => 'Aprilo Support AI',
+            'category' => 'ai_support',
+            'product_type' => 'subscription',
+        ]);
+        $plan = Plan::create([
+            'product_id' => $product->id,
+            'slug' => 'enterprise',
+            'name' => 'Enterprise AI',
+        ]);
+        Subscription::create([
+            'organization_id' => $this->organization->id,
+            'product_id' => $product->id,
+            'plan_id' => $plan->id,
+            'razorpay_subscription_id' => 'teams-' . uniqid(),
+            'status' => 'active',
         ]);
     }
 
