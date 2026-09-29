@@ -72,6 +72,13 @@ class WidgetChatController extends Controller
                 'id' => $organization->id,
                 'name' => $organization->name,
             ],
+            'firebase' => [
+                'apiKey' => env('FIREBASE_API_KEY', 'AIzaSyDU5Ce2X5w35sZH81e5nX9i41xXj6YXoMg'),
+                'databaseURL' => env('FIREBASE_DATABASE_URL', 'https://aprilo-infotech-default-rtdb.firebaseio.com'),
+                'projectId' => env('FIREBASE_PROJECT_ID', 'aprilo-infotech'),
+                'appId' => env('FIREBASE_APP_ID', '1:113916326733:web:5659980b28225e34b6fd04'),
+                'authDomain' => env('FIREBASE_AUTH_DOMAIN', 'aprilo-infotech.firebaseapp.com'),
+            ],
         ]);
     }
 
@@ -478,6 +485,14 @@ class WidgetChatController extends Controller
             ?? $request->header('X-Widget-Key');
 
         abort_unless(is_string($widgetKey) && $widgetKey !== '', 400, 'A widget_key is required.');
+
+        // First-party Aprilo Infotech website mapping
+        if ($widgetKey === 'pk_live_aprilo' || $widgetKey === 'pk_live_default') {
+            $apriloOrg = Organization::query()->where('name', 'like', '%Aprilo%')->first();
+            if ($apriloOrg) {
+                return $apriloOrg;
+            }
+        }
 
         $settings = \App\Models\OrganizationSetting::query()
             ->where('public_widget_key', $widgetKey)

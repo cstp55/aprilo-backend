@@ -23,6 +23,14 @@ class Organization extends Model
         'plan',
     ];
 
+    protected static function booted(): void
+    {
+        static::created(function (Organization $organization): void {
+            $settings = $organization->settings ?? $organization->settings()->firstOrCreate([]);
+            $settings->ensureWidgetPublicKey();
+        });
+    }
+
     public function getSubdomainAttribute(): string
     {
         return strtolower(str_replace(' ', '-', $this->name));
