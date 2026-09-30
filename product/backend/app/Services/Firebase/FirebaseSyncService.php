@@ -85,9 +85,16 @@ class FirebaseSyncService
             } elseif (isset($val['nullValue'])) {
                 $parsed[$key] = null;
             } elseif (isset($val['arrayValue']['values'])) {
-                $parsed[$key] = array_map(fn ($item) => reset($item), $val['arrayValue']['values']);
+                // Convert array values to scalar items, then join as string if all are scalar
+                $items = array_map(fn ($item) => reset($item), $val['arrayValue']['values']);
+                $allScalar = array_reduce($items, fn ($carry, $i) => $carry && (is_string($i) || is_numeric($i) || is_bool($i) || is_null($i)), true);
+                $parsed[$key] = $allScalar ? implode(', ', array_filter($items, fn ($i) => ! is_null($i))) : $items;
+            } elseif (isset($val['mapValue']['fields'])) {
+                // Nested map — skip rendering, store as JSON string
+                $parsed[$key] = json_encode($val['mapValue']['fields']);
             } else {
-                $parsed[$key] = $val;
+                // Unknown type — skip rather than storing raw Firestore structure
+                $parsed[$key] = null;
             }
         }
 

@@ -331,11 +331,12 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <div style="font-size: 12.5px; font-weight: 500; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $conv['page_title'] ?? '' }}">
-                                        {{ $conv['page_title'] ?? 'Storefront' }}
+                                    <div style="font-size: 12.5px; font-weight: 500; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ is_array($conv['page_title'] ?? '') ? implode(' ', $conv['page_title']) : ($conv['page_title'] ?? '') }}">
+                                        {{ is_array($conv['page_title'] ?? null) ? implode(' ', $conv['page_title']) : ($conv['page_title'] ?? 'Storefront') }}
                                     </div>
-                                    <a href="{{ $conv['page_url'] ?? '#' }}" target="_blank" style="font-size: 11px; color: #6366f1; text-decoration: none; max-width: 200px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                                        {{ $conv['page_url'] ?? '' }}
+                                    @php $pageUrl = is_array($conv['page_url'] ?? null) ? implode('', $conv['page_url']) : ($conv['page_url'] ?? ''); @endphp
+                                    <a href="{{ $pageUrl ?: '#' }}" target="_blank" style="font-size: 11px; color: #6366f1; text-decoration: none; max-width: 200px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                        {{ $pageUrl }}
                                     </a>
                                 </td>
                                 <td style="font-weight: 600;">{{ $conv['ai_query_count'] ?? 0 }}</td>
@@ -347,11 +348,11 @@
                                     @endif
                                 </td>
                                 <td style="max-width: 280px; font-size: 12px; color: #334155;">
-                                    <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ $conv['last_message_preview'] ?? '' }}">
-                                        {{ $conv['last_message_preview'] ?? 'No preview available' }}
+                                    <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="{{ is_array($conv['last_message_preview'] ?? '') ? implode(' ', $conv['last_message_preview']) : ($conv['last_message_preview'] ?? '') }}">
+                                        {{ is_array($conv['last_message_preview'] ?? null) ? implode(' ', $conv['last_message_preview']) : ($conv['last_message_preview'] ?? 'No preview available') }}
                                     </div>
                                     @if (! empty($conv['assigned_agent_name']))
-                                        <span style="font-size: 10.5px; color: var(--muted);">Agent: {{ $conv['assigned_agent_name'] }}</span>
+                                        <span style="font-size: 10.5px; color: var(--muted);">Agent: {{ is_array($conv['assigned_agent_name']) ? implode(', ', $conv['assigned_agent_name']) : $conv['assigned_agent_name'] }}</span>
                                     @endif
                                 </td>
                                 <td style="font-size: 12px; font-family: monospace; white-space: nowrap;">
