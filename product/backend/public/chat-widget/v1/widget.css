@@ -1,0 +1,585 @@
+:host {
+  all: initial;
+  --aprilo-primary: #22C55E;
+  --aprilo-primary-dark: #16A34A;
+  --aprilo-primary-deep: #065F46;
+  --aprilo-accent: #FF8A00;
+  --aprilo-accent-light: #FFB020;
+  --aprilo-background: #F8FAFC;
+  --aprilo-panel-bg: #FFFFFF;
+  --aprilo-text: #1F2937;
+  --aprilo-secondary-text: #6B7280;
+  --aprilo-border: #E2E8F0;
+  --aprilo-border-radius: 16px;
+  --aprilo-shadow: 0 12px 36px -4px rgba(0, 0, 0, 0.15), 0 4px 16px -2px rgba(0, 0, 0, 0.08);
+  --aprilo-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --aprilo-z-index: 2147483640;
+  
+  font-family: var(--aprilo-font-family);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--aprilo-text);
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ==========================================================================
+   LAUNCHER BUTTON
+   ========================================================================== */
+
+.aprilo-launcher {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--aprilo-primary);
+  color: #FFFFFF;
+  box-shadow: 0 8px 24px rgba(34, 197, 94, 0.35), 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--aprilo-z-index);
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, background-color 0.2s ease;
+  outline: none;
+  touch-action: manipulation;
+}
+
+.aprilo-launcher:hover {
+  transform: scale(1.06);
+  background: var(--aprilo-primary-dark);
+  box-shadow: 0 10px 28px rgba(22, 163, 74, 0.42), 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.aprilo-launcher:focus-visible {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.4), 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.aprilo-launcher:active {
+  transform: scale(0.96);
+}
+
+.aprilo-launcher.position-bottom-left {
+  right: auto;
+  left: 24px;
+}
+
+.aprilo-launcher-icon {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease, opacity 0.2s ease;
+}
+
+.aprilo-launcher-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--aprilo-accent);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 2px 6px rgba(255, 138, 0, 0.4);
+  animation: aprilo-pulse 2s infinite;
+}
+
+@keyframes aprilo-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ==========================================================================
+   CHAT PANEL
+   ========================================================================== */
+
+.aprilo-panel {
+  position: fixed;
+  bottom: 96px;
+  right: 24px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  height: 620px;
+  max-height: calc(100vh - 120px);
+  background: var(--aprilo-panel-bg);
+  border-radius: var(--aprilo-border-radius);
+  box-shadow: var(--aprilo-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: var(--aprilo-z-index);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(18px) scale(0.96);
+  transform-origin: bottom right;
+  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.24s;
+}
+
+.aprilo-panel.position-bottom-left {
+  right: auto;
+  left: 24px;
+  transform-origin: bottom left;
+}
+
+.aprilo-panel.open {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+/* ==========================================================================
+   HEADER
+   ========================================================================== */
+
+.aprilo-header {
+  background: linear-gradient(135deg, var(--aprilo-primary), var(--aprilo-primary-dark));
+  color: #FFFFFF;
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.aprilo-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aprilo-header-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.aprilo-header-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.aprilo-header-avatar svg {
+  width: 22px;
+  height: 22px;
+  fill: #FFFFFF;
+}
+
+.aprilo-header-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.aprilo-header-name {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+
+.aprilo-header-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.aprilo-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #A7F3D0;
+  box-shadow: 0 0 8px #34D399;
+}
+
+.aprilo-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aprilo-header-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #FFFFFF;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+  outline: none;
+}
+
+.aprilo-header-btn:hover {
+  background: rgba(255, 255, 255, 0.28);
+  transform: scale(1.05);
+}
+
+.aprilo-header-btn:focus-visible {
+  box-shadow: 0 0 0 2px #FFFFFF;
+}
+
+/* ==========================================================================
+   MESSAGES CONTAINER
+   ========================================================================== */
+
+.aprilo-body {
+  flex: 1;
+  background: var(--aprilo-background);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scroll-behavior: smooth;
+}
+
+/* Welcome Card */
+.aprilo-welcome-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--aprilo-border);
+  margin-bottom: 8px;
+}
+
+.aprilo-welcome-heading {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--aprilo-text);
+  margin-bottom: 6px;
+}
+
+.aprilo-welcome-text {
+  font-size: 13px;
+  color: var(--aprilo-secondary-text);
+  line-height: 1.5;
+}
+
+/* Quick Actions */
+.aprilo-quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.aprilo-quick-btn {
+  background: #FFFFFF;
+  border: 1px solid var(--aprilo-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--aprilo-text);
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.aprilo-quick-btn:hover {
+  background: #F0FDF4;
+  border-color: var(--aprilo-primary);
+  color: var(--aprilo-primary-dark);
+  transform: translateX(2px);
+}
+
+.aprilo-quick-btn-arrow {
+  color: var(--aprilo-secondary-text);
+  font-size: 14px;
+  transition: transform 0.15s ease;
+}
+
+.aprilo-quick-btn:hover .aprilo-quick-btn-arrow {
+  transform: translateX(3px);
+  color: var(--aprilo-primary);
+}
+
+/* Message Bubbles */
+.aprilo-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
+  word-break: break-word;
+  animation: aprilo-fade-in 0.2s ease-out;
+}
+
+@keyframes aprilo-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.aprilo-msg.user, .aprilo-msg.customer {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.aprilo-msg.assistant,
+.aprilo-msg.human {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.aprilo-msg-bubble {
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.aprilo-msg.user .aprilo-msg-bubble, .aprilo-msg.customer .aprilo-msg-bubble {
+  background: var(--aprilo-primary);
+  color: #FFFFFF;
+  border-bottom-right-radius: 4px;
+}
+
+.aprilo-msg.assistant .aprilo-msg-bubble {
+  background: #FFFFFF;
+  color: var(--aprilo-text);
+  border: 1px solid var(--aprilo-border);
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.aprilo-msg.human .aprilo-msg-bubble {
+  background: #EFF6FF;
+  color: #1E3A8A;
+  border: 1px solid #BFDBFE;
+  border-bottom-left-radius: 4px;
+}
+
+.aprilo-msg.system {
+  align-self: center;
+  align-items: center;
+  max-width: 90%;
+  margin: 6px 0;
+}
+
+.aprilo-msg.system .aprilo-msg-bubble {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.aprilo-msg-meta {
+  font-size: 10.5px;
+  color: var(--aprilo-secondary-text);
+  margin-top: 4px;
+  padding: 0 4px;
+}
+
+/* Typing Indicator */
+.aprilo-typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  background: #FFFFFF;
+  border-radius: 14px;
+  border-bottom-left-radius: 4px;
+  border: 1px solid var(--aprilo-border);
+  width: fit-content;
+  align-self: flex-start;
+}
+
+.aprilo-typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--aprilo-secondary-text);
+  animation: aprilo-bounce 1.3s infinite ease-in-out;
+}
+
+.aprilo-typing-dot:nth-child(1) { animation-delay: 0s; }
+.aprilo-typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.aprilo-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes aprilo-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1.1); opacity: 1; }
+}
+
+/* Offline Notice */
+.aprilo-offline-banner {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 12.5px;
+  color: #92400E;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   INPUT FOOTER
+   ========================================================================== */
+
+.aprilo-footer {
+  background: #FFFFFF;
+  padding: 12px 14px;
+  border-top: 1px solid var(--aprilo-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.aprilo-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aprilo-input {
+  flex: 1;
+  background: var(--aprilo-background);
+  border: 1px solid var(--aprilo-border);
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--aprilo-text);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  resize: none;
+}
+
+.aprilo-input:focus {
+  border-color: var(--aprilo-primary);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.15);
+  background: #FFFFFF;
+}
+
+.aprilo-input::placeholder {
+  color: #9CA3AF;
+}
+
+.aprilo-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--aprilo-primary);
+  border: none;
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease, background-color 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
+  outline: none;
+}
+
+.aprilo-send-btn:hover:not(:disabled) {
+  background: var(--aprilo-primary-dark);
+  transform: scale(1.05);
+}
+
+.aprilo-send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.aprilo-branding {
+  text-align: center;
+  font-size: 11px;
+  color: #9CA3AF;
+  letter-spacing: 0.01em;
+}
+
+.aprilo-branding a {
+  color: var(--aprilo-secondary-text);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.aprilo-branding a:hover {
+  color: var(--aprilo-primary);
+}
+
+/* ==========================================================================
+   RESPONSIVE / MOBILE (<= 640px)
+   ========================================================================== */
+
+@media (max-width: 640px) {
+  .aprilo-panel {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    transform: translateY(100%);
+  }
+
+  .aprilo-panel.open {
+    transform: translateY(0);
+  }
+
+  .aprilo-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .aprilo-footer {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  .aprilo-launcher {
+    bottom: max(20px, env(safe-area-inset-bottom));
+    right: max(20px, env(safe-area-inset-right));
+  }
+
+  .aprilo-launcher.position-bottom-left {
+    left: max(20px, env(safe-area-inset-left));
+  }
+}

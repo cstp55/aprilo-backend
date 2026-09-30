@@ -56,6 +56,11 @@ class Organization extends Model
         return $this->hasMany(OrganizationEntitlement::class);
     }
 
+    public function chatUsages(): HasMany
+    {
+        return $this->hasMany(OrganizationChatUsage::class)->orderByDesc('usage_date');
+    }
+
     public function hasEntitlement(string $feature): bool
     {
         return $this->entitlements()

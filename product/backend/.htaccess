@@ -3,12 +3,13 @@ Options -Indexes
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Keep Laravel's project files from being served directly.
+    # Block direct access to sensitive Laravel files/directories
     RewriteRule ^(?:\.env|composer\.(?:json|lock)|artisan|bootstrap|config|database|resources|routes|storage|tests|vendor)(?:/|$) - [F,L,NC]
 
-    # Forward the cPanel document root into Laravel's public directory.
-    RewriteCond %{REQUEST_URI} !^/public(?:/|$) [NC]
-    RewriteRule ^(.*)$ public/$1 [L]
-</IfModule>
+    # Homepage: directly load Laravel public/index.php
+    RewriteRule ^$ public/index.php [L]
 
-DirectoryIndex public/index.php
+    # All other requests: internally forward to public/
+    RewriteCond %{REQUEST_URI} !^/public(?:/|$) [NC]
+    RewriteRule ^(.+)$ public/$1 [L]
+</IfModule>

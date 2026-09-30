@@ -11,10 +11,11 @@ class GeminiAiProvider implements AiProviderInterface
 {
     public function generateAnswer(string $question, array $context, array $policy = []): array
     {
-        $settings = $this->getSettings();
+        $settings = $policy['settings'] ?? ($policy['organization']?->settings ?? $this->getSettings());
+        $orgDetails = trim($settings->organization_details ?? '');
         
-        // Strict context enforcement: if active and no context is retrieved, fail back immediately
-        if ($settings->strict_context_enforcement && empty($context)) {
+        // Strict context enforcement: if active, no retrieved documents, AND no organization metadata, fail back immediately
+        if ($settings->strict_context_enforcement && empty($context) && empty($orgDetails)) {
             return [
                 'answer_text' => 'I cannot confirm this from approved sources yet. Please escalate to support.',
                 'answer_status' => 'fallback',
@@ -114,6 +115,9 @@ class GeminiAiProvider implements AiProviderInterface
                         $answerStatus = 'fallback';
                     }
                 }
+                $promptTokens = (int) ($json['usageMetadata']['promptTokenCount'] ?? 0);
+                $candidatesTokens = (int) ($json['usageMetadata']['candidatesTokenCount'] ?? 0);
+                $totalTokens = (int) ($json['usageMetadata']['totalTokenCount'] ?? ($promptTokens + $candidatesTokens));
             } else {
                 Log::warning("Gemini API request failed: " . $response->status() . " " . $response->body());
             }
@@ -135,6 +139,12 @@ class GeminiAiProvider implements AiProviderInterface
                 $answerText = "Based on approved sources, here is the summarized guidance:\n" . implode("\n", $bullets);
                 $answerStatus = 'answered';
             }
+        }
+
+        if (!isset($totalTokens) || $totalTokens === 0) {
+            $promptTokens = max(1, (int) round(strlen($prompt) / 4));
+            $candidatesTokens = max(1, (int) round(strlen($answerText) / 4));
+            $totalTokens = $promptTokens + $candidatesTokens;
         }
 
         $maxSimilarity = 0.0;
@@ -159,6 +169,11 @@ class GeminiAiProvider implements AiProviderInterface
             'answer_status' => $answerStatus,
             'confidence_label' => $confidenceLabel,
             'sources' => $sources,
+            'token_usage' => [
+                'prompt_tokens' => $promptTokens,
+                'completion_tokens' => $candidatesTokens,
+                'total_tokens' => $totalTokens,
+            ],
         ];
     }
 
@@ -217,7 +232,16 @@ class GeminiAiProvider implements AiProviderInterface
             }
         }
 
-        // 2. Check subdomain parameter
+        // 2. Check widget_key from request
+        $widgetKey = request()->input('widget_key') ?? request()->header('X-Widget-Key');
+        if ($widgetKey) {
+            $setting = OrganizationSetting::where('public_widget_key', $widgetKey)->first();
+            if ($setting) {
+                return $setting;
+            }
+        }
+
+        // 3. Check subdomain parameter
         $subdomain = request()->input('subdomain');
         if ($subdomain) {
             $org = Organization::where('name', 'like', "%$subdomain%")->first();

@@ -36,6 +36,12 @@ class NavigationService
                         'active' => request()->routeIs('admin.super.organizations*'),
                     ],
                     [
+                        'title' => 'Chat & Token Monitoring',
+                        'route' => 'admin.super.monitoring',
+                        'icon' => 'activity',
+                        'active' => request()->routeIs('admin.super.monitoring*'),
+                    ],
+                    [
                         'title' => 'Global Revenue',
                         'route' => 'admin.super.revenue',
                         'icon' => 'chart',
@@ -175,6 +181,15 @@ class NavigationService
                 'route' => 'admin.logs',
                 'icon' => 'file-text',
                 'active' => request()->routeIs('admin.logs*'),
+            ];
+        }
+
+        if ($hasAi && ($owner || $user->hasPermission('logs.view'))) {
+            $auditItems[] = [
+                'title' => 'Chat & Token Usage',
+                'route' => 'admin.monitoring',
+                'icon' => 'activity',
+                'active' => request()->routeIs('admin.monitoring*'),
             ];
         }
 

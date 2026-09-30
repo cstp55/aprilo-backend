@@ -48,8 +48,11 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::patch('/organizations/{organization}', [SuperAdminController::class, 'updateOrgStatus'])->name('organizations.update');
             Route::get('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'subscriptionAccess'])->name('organizations.subscriptions');
             Route::post('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'grantSubscription'])->name('organizations.subscriptions.store');
-            Route::patch('/organizations/{organization}/subscriptions/{subscription}/payment-status', [SuperAdminController::class, 'updatePaymentStatus'])->name('organizations.subscriptions.payment-status');
             Route::get('/revenue', [SuperAdminController::class, 'revenue'])->name('revenue');
+            Route::get('/monitoring', [SuperAdminController::class, 'chatMonitoring'])->name('monitoring');
+            Route::post('/monitoring/sync-firebase', [SuperAdminController::class, 'syncFirebaseMonitoring'])->name('monitoring.sync-firebase');
+            Route::get('/organizations/{organization}/monitoring', [SuperAdminController::class, 'organizationChatMonitoring'])->name('organizations.monitoring');
+            Route::post('/organizations/{organization}/toggle-widget', [SuperAdminController::class, 'toggleOrganizationWidget'])->name('organizations.toggle-widget');
             Route::get('/logs', [SuperAdminController::class, 'logs'])->name('logs');
             Route::get('/cache', [SuperAdminController::class, 'cache'])->name('cache');
             Route::post('/cache/clear', [SuperAdminController::class, 'clearCache'])->name('cache.clear');
@@ -96,6 +99,9 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::get('/settings/pricing', [AdminConsoleController::class, 'settingsPricing'])->name('settings.pricing');
 
         // Review & Audit Logs
+        Route::get('/monitoring', [AdminConsoleController::class, 'chatMonitoring'])->name('monitoring');
+        Route::post('/monitoring/sync-firebase', [AdminConsoleController::class, 'syncFirebaseMonitoring'])->name('monitoring.sync-firebase');
+        Route::post('/settings/toggle-widget', [AdminConsoleController::class, 'toggleWidget'])->name('settings.toggle-widget');
         Route::get('/logs', [AdminConsoleController::class, 'logs'])->name('logs');
         Route::patch('/settings', [AdminConsoleController::class, 'updateSettings'])->name('settings.update');
         Route::post('/settings/preview', [AdminConsoleController::class, 'previewQuestion'])->name('settings.preview');

@@ -7,12 +7,16 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessKnowledgeSource;
 use App\Models\Escalation;
 use App\Models\KnowledgeSource;
+use App\Models\OrganizationChatUsage;
 use App\Models\OrganizationSetting;
 use App\Models\Question;
+use App\Services\Firebase\FirebaseSyncService;
 use App\Services\Metrics\MetricsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -939,6 +943,74 @@ class AdminConsoleController extends Controller
         ]);
     }
 
+    public function chatMonitoring(Request $request, FirebaseSyncService $syncService): View
+    {
+        $this->authorizeAdmin($request);
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(['organization_id' => $organization->id]);
+
+        $force = $request->boolean('sync');
+        $firebaseSync = $syncService->syncAll($force);
+        $firestoreSummary = $syncService->getFirestoreSummary($organization->id);
+
+        $today = Carbon::today()->toDateString();
+
+        $totalQueries = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('queries_count');
+        $totalPromptTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('prompt_tokens');
+        $totalCompletionTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('completion_tokens');
+        $totalTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('total_tokens');
+        $totalCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->sum('cost_estimate');
+
+        $todayQueries = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('queries_count');
+        $todayTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('total_tokens');
+        $todayCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('cost_estimate');
+
+        $dailyUsages = OrganizationChatUsage::query()
+            ->where('organization_id', $organization->id)
+            ->orderByDesc('usage_date')
+            ->paginate(30);
+
+        return view('admin.chat-monitoring', compact(
+            'organization',
+            'settings',
+            'totalQueries',
+            'totalPromptTokens',
+            'totalCompletionTokens',
+            'totalTokens',
+            'totalCost',
+            'todayQueries',
+            'todayTokens',
+            'todayCost',
+            'dailyUsages',
+            'firestoreSummary',
+            'firebaseSync'
+        ));
+    }
+
+    public function syncFirebaseMonitoring(Request $request, FirebaseSyncService $syncService): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+        $syncService->syncAll(true);
+
+        return back()->with('status', 'Your organization chat and token metrics have been updated live from Firestore.');
+    }
+
+    public function toggleWidget(Request $request): RedirectResponse
+    {
+        $this->authorizeAdmin($request);
+        $organization = $request->user()->organization;
+        $settings = OrganizationSetting::firstOrCreate(['organization_id' => $organization->id]);
+
+        $newState = $request->has('is_widget_enabled')
+            ? $request->boolean('is_widget_enabled')
+            : !($settings->is_widget_enabled ?? true);
+
+        $settings->update(['is_widget_enabled' => $newState]);
+
+        $statusText = $newState ? 'ENABLED (Online & Answering)' : 'DISABLED (Offline & Hidden)';
+        return back()->with('status', "Your Chatbot Widget is now {$statusText}.");
+    }
+
     private function authorizeAdmin(Request $request): void
     {
         $user = $request->user();
@@ -948,7 +1020,7 @@ class AdminConsoleController extends Controller
                 abort_unless($user->organization?->hasActiveProductCategory('ai_support'), 403);
             }
 
-            if ($request->routeIs('admin.sources*', 'admin.settings.agent', 'admin.settings.design', 'admin.settings.deploy', 'admin.settings.connect*', 'admin.escalations*', 'admin.logs*', 'admin.chat*')) {
+            if ($request->routeIs('admin.sources*', 'admin.settings.agent', 'admin.settings.design', 'admin.settings.deploy', 'admin.settings.connect*', 'admin.escalations*', 'admin.logs*', 'admin.chat*', 'admin.monitoring*', 'admin.settings.toggle-widget*')) {
                 abort_unless($user->organization?->hasActiveProductCategory('ai_support'), 403);
             }
         }

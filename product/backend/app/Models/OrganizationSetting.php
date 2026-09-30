@@ -19,6 +19,8 @@ class OrganizationSetting extends Model
         'minutes_saved_per_resolved_question',
         'default_escalation_owner',
         'assistant_status',
+        'is_widget_enabled',
+        'total_tokens_used',
         'chatbot_color_palette',
         'chatbot_icon',
         'chatbot_data_source',
@@ -33,6 +35,7 @@ class OrganizationSetting extends Model
         
         // Advanced Custom Name & Credentials
         'assistant_name',
+        'welcome_message',
         'teams_webhook_url',
         'teams_tenant_id',
         'teams_app_id',
@@ -89,6 +92,8 @@ class OrganizationSetting extends Model
     {
         return [
             'live_chat_enabled' => 'boolean',
+            'is_widget_enabled' => 'boolean',
+            'total_tokens_used' => 'integer',
             'max_support_agents' => 'integer',
             'chatbot_escalation_enabled' => 'boolean',
             'connect_teams' => 'boolean',

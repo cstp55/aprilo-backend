@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\AuditEvent;
 use App\Models\KnowledgeSource;
 use App\Models\Organization;
+use App\Models\OrganizationChatUsage;
 use App\Models\OrganizationEntitlement;
 use App\Models\OrganizationSetting;
 use App\Models\Plan;
@@ -15,12 +16,15 @@ use App\Models\Product;
 use App\Models\Question;
 use App\Models\Subscription;
 use App\Models\User;
+use App\Services\Firebase\FirebaseSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -138,12 +142,37 @@ class SuperAdminController extends Controller
                 'assistant_status' => 'active',
                 'chatbot_color_palette' => '#d22630',
                 'chatbot_icon' => 'robot',
+                'restriction_template' => 'general_faq',
+                'strict_context_enforcement' => true,
             ]
         );
         $widgetKey = $settings->ensureWidgetPublicKey();
-        $apiUrl = rtrim((string) config('app.url'), '/');
 
-        return view('admin.super.organization-widget', compact('organization', 'settings', 'widgetKey', 'apiUrl'));
+        // Ensure apiUrl resolves to live application domain instead of localhost on production
+        $apiUrl = $request->getSchemeAndHttpHost();
+        if (empty($apiUrl) || str_contains($apiUrl, 'localhost')) {
+            $configured = rtrim((string) config('app.url'), '/');
+            if (!empty($configured) && !str_contains($configured, 'localhost')) {
+                $apiUrl = $configured;
+            }
+        }
+
+        // Intelligent default sample data if not already configured
+        $defaultWelcomeMessage = "Hello! Welcome to " . $organization->name . ". How can we assist you today?";
+        $defaultOrgDetails = $organization->name . " provides specialized services and customer care. Our mission is to deliver fast, reliable, and professional support to all visitors and clients.";
+        $defaultSystemPrompt = "You are " . ($settings->assistant_name ?: ($organization->name . ' Assistant')) . ", the official virtual assistant for " . $organization->name . ". Greet visitors courteously, provide clear and accurate information about our services and guidelines, and direct complex inquiries to our support team.";
+        $defaultEligibility = "Answer questions strictly relevant to " . $organization->name . " services, policies, and customer inquiries. Do not share confidential internal credentials, employee private records, or proprietary system secrets. If uncertain, suggest speaking with our human support team.";
+
+        return view('admin.super.organization-widget', compact(
+            'organization',
+            'settings',
+            'widgetKey',
+            'apiUrl',
+            'defaultWelcomeMessage',
+            'defaultOrgDetails',
+            'defaultSystemPrompt',
+            'defaultEligibility'
+        ));
     }
 
     public function updateOrganizationWidget(Request $request, Organization $organization): RedirectResponse
@@ -156,10 +185,27 @@ class SuperAdminController extends Controller
             'chatbot_color_palette' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'chatbot_icon' => ['required', Rule::in(['robot', 'support', 'star', 'chat'])],
             'live_chat_enabled' => ['nullable', 'boolean'],
+            'is_widget_enabled' => ['nullable', 'boolean'],
+            'welcome_message' => ['nullable', 'string', 'max:1000'],
+            'organization_details' => ['nullable', 'string', 'max:5000'],
+            'custom_system_prompt' => ['nullable', 'string', 'max:5000'],
+            'restriction_template' => ['required', Rule::in(['general_faq', 'strict_retrieval', 'hr_policy', 'custom'])],
+            'eligibility_criteria' => ['nullable', 'string', 'max:5000'],
+            'strict_context_enforcement' => ['nullable', 'boolean'],
         ]);
 
         $validated['live_chat_enabled'] = $request->boolean('live_chat_enabled');
-        $settings->update($validated);
+        $validated['is_widget_enabled'] = $request->boolean('is_widget_enabled');
+        $validated['strict_context_enforcement'] = $request->boolean('strict_context_enforcement');
+
+        // Dynamically filter only columns that physically exist in the database table
+        $columnsToSave = array_filter(
+            $validated,
+            fn ($value, $key) => Schema::hasColumn('organization_settings', $key),
+            ARRAY_FILTER_USE_BOTH
+        );
+
+        $settings->update($columnsToSave);
 
         AuditEvent::create([
             'organization_id' => $organization->id,
@@ -170,14 +216,41 @@ class SuperAdminController extends Controller
             'metadata' => [
                 'assistant_name' => $settings->assistant_name,
                 'assistant_status' => $settings->assistant_status,
+                'is_widget_enabled' => $settings->is_widget_enabled,
                 'chatbot_color_palette' => $settings->chatbot_color_palette,
                 'chatbot_icon' => $settings->chatbot_icon,
                 'live_chat_enabled' => $settings->live_chat_enabled,
+                'restriction_template' => $settings->restriction_template,
+                'strict_context_enforcement' => $settings->strict_context_enforcement,
             ],
         ]);
 
         return redirect()->route('admin.super.organizations.widget', $organization)
-            ->with('status', 'Widget settings updated for ' . $organization->name . '.');
+            ->with('status', 'Widget settings, metadata, and role guardrails updated for ' . $organization->name . '.');
+    }
+
+    public function toggleOrganizationWidget(Request $request, Organization $organization): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        $settings = OrganizationSetting::firstOrCreate(['organization_id' => $organization->id]);
+
+        $newState = $request->has('is_widget_enabled')
+            ? $request->boolean('is_widget_enabled')
+            : !($settings->is_widget_enabled ?? true);
+
+        $settings->update(['is_widget_enabled' => $newState]);
+
+        AuditEvent::create([
+            'organization_id' => $organization->id,
+            'actor_user_id' => $request->user()->id,
+            'event_type' => 'WIDGET_STATUS_TOGGLED',
+            'entity_type' => 'organization_setting',
+            'entity_id' => $settings->id,
+            'metadata' => ['is_widget_enabled' => $newState],
+        ]);
+
+        $statusText = $newState ? 'ENABLED (Online & Interactive)' : 'DISABLED (Offline & Inactive)';
+        return back()->with('status', "Widget for {$organization->name} is now {$statusText}.");
     }
 
     public function rotateOrganizationWidgetKey(Request $request, Organization $organization): RedirectResponse
@@ -522,6 +595,137 @@ class SuperAdminController extends Controller
         $totalPending = Invoice::whereIn('status', ['open', 'unpaid'])->sum('amount');
 
         return view('admin.super.revenue', compact('invoices', 'totalPaid', 'totalPending'));
+    }
+
+    public function chatMonitoring(Request $request, FirebaseSyncService $syncService): View
+    {
+        $this->authorizeSuperAdmin($request);
+
+        // Ensure database is in sync with Firestore conversations (cached for 60 seconds)
+        $force = $request->boolean('sync');
+        $firebaseSync = $syncService->syncAll($force);
+        $firestoreSummary = $syncService->getFirestoreSummary();
+
+        $today = Carbon::today()->toDateString();
+
+        $totalQueries = (int) OrganizationChatUsage::sum('queries_count');
+        $totalPromptTokens = (int) OrganizationChatUsage::sum('prompt_tokens');
+        $totalCompletionTokens = (int) OrganizationChatUsage::sum('completion_tokens');
+        $totalTokens = (int) OrganizationChatUsage::sum('total_tokens');
+        $totalCost = (float) OrganizationChatUsage::sum('cost_estimate');
+
+        $todayQueries = (int) OrganizationChatUsage::where('usage_date', $today)->sum('queries_count');
+        $todayTokens = (int) OrganizationChatUsage::where('usage_date', $today)->sum('total_tokens');
+        $todayCost = (float) OrganizationChatUsage::where('usage_date', $today)->sum('cost_estimate');
+
+        $activeOrgsCount = OrganizationChatUsage::distinct('organization_id')->count('organization_id');
+        $totalOrgsCount = Organization::count();
+
+        $dailyUsages = OrganizationChatUsage::query()
+            ->select(
+                'usage_date',
+                DB::raw('SUM(queries_count) as total_queries'),
+                DB::raw('SUM(prompt_tokens) as total_prompt_tokens'),
+                DB::raw('SUM(completion_tokens) as total_completion_tokens'),
+                DB::raw('SUM(total_tokens) as total_tokens'),
+                DB::raw('SUM(cost_estimate) as total_cost'),
+                DB::raw('COUNT(DISTINCT organization_id) as active_orgs')
+            )
+            ->groupBy('usage_date')
+            ->orderByDesc('usage_date')
+            ->limit(30)
+            ->get();
+
+        $search = $request->query('search');
+        $organizations = Organization::query()
+            ->with(['settings'])
+            ->when($search, function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%");
+            })
+            ->withCount(['chatUsages as total_queries' => function ($q) {
+                $q->select(DB::raw('COALESCE(SUM(queries_count), 0)'));
+            }])
+            ->withCount(['chatUsages as total_tokens' => function ($q) {
+                $q->select(DB::raw('COALESCE(SUM(total_tokens), 0)'));
+            }])
+            ->latest()
+            ->paginate(15)
+            ->withQueryString();
+
+        $todayUsages = OrganizationChatUsage::where('usage_date', $today)
+            ->whereIn('organization_id', $organizations->pluck('id'))
+            ->get()
+            ->keyBy('organization_id');
+
+        return view('admin.super.chat-monitoring', compact(
+            'totalQueries',
+            'totalPromptTokens',
+            'totalCompletionTokens',
+            'totalTokens',
+            'totalCost',
+            'todayQueries',
+            'todayTokens',
+            'todayCost',
+            'activeOrgsCount',
+            'totalOrgsCount',
+            'dailyUsages',
+            'organizations',
+            'todayUsages',
+            'search',
+            'firebaseSync',
+            'firestoreSummary'
+        ));
+    }
+
+    public function syncFirebaseMonitoring(Request $request, FirebaseSyncService $syncService): RedirectResponse
+    {
+        $this->authorizeSuperAdmin($request);
+        $result = $syncService->syncAll(true);
+
+        return back()->with('status', "Firestore synchronized successfully: {$result['total_conversations']} conversations, {$result['total_customers']} customers, and {$result['total_ai_queries']} AI queries updated.");
+    }
+
+    public function organizationChatMonitoring(Request $request, Organization $organization, FirebaseSyncService $syncService): View
+    {
+        $this->authorizeSuperAdmin($request);
+
+        $force = $request->boolean('sync');
+        $firebaseSync = $syncService->syncAll($force);
+        $firestoreSummary = $syncService->getFirestoreSummary($organization->id);
+
+        $today = Carbon::today()->toDateString();
+        $settings = $organization->settings()->firstOrCreate(['organization_id' => $organization->id]);
+
+        $totalQueries = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('queries_count');
+        $totalPromptTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('prompt_tokens');
+        $totalCompletionTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('completion_tokens');
+        $totalTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->sum('total_tokens');
+        $totalCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->sum('cost_estimate');
+
+        $todayQueries = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('queries_count');
+        $todayTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('total_tokens');
+        $todayCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('cost_estimate');
+
+        $dailyUsages = OrganizationChatUsage::query()
+            ->where('organization_id', $organization->id)
+            ->orderByDesc('usage_date')
+            ->paginate(30);
+
+        return view('admin.super.organization-monitoring', compact(
+            'organization',
+            'settings',
+            'totalQueries',
+            'totalPromptTokens',
+            'totalCompletionTokens',
+            'totalTokens',
+            'totalCost',
+            'todayQueries',
+            'todayTokens',
+            'todayCost',
+            'dailyUsages',
+            'firestoreSummary',
+            'firebaseSync'
+        ));
     }
 
     public function logs(Request $request): View

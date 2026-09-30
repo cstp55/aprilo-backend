@@ -3,6 +3,13 @@
 @section('title', 'Organization Details - ' . $organization->name)
 
 @section('content')
+    <div style="margin-bottom: 16px;">
+        <a class="button" style="width: auto; display: inline-flex; align-items: center; gap: 8px; background: #ffffff; color: var(--ink); border: 1px solid var(--line); font-size: 13px; font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,0.05); padding: 8px 14px; border-radius: 6px;" href="{{ route('admin.super.organizations') }}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            Back to Organizations
+        </a>
+    </div>
+
     <div class="header" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; flex-wrap: wrap;">
         <div>
             <div class="eyebrow" style="color: #6366f1;">Organization profile</div>
@@ -10,7 +17,6 @@
             <p class="help" style="margin-bottom: 0;">Tenant ID: {{ $organization->id }}</p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <a class="button" style="width: auto; background: transparent; color: var(--ink); border: 1px solid var(--line); box-shadow: none;" href="{{ route('admin.super.organizations') }}">Organizations</a>
             <a class="button" style="width: auto;" href="{{ route('admin.super.organizations.subscriptions', $organization) }}">Manage subscription</a>
             <a class="button" style="width: auto;" href="{{ route('admin.super.organizations.widget', $organization) }}">Widget & publish</a>
             <a class="button" style="width: auto;" href="{{ route('admin.super.organizations.knowledge', $organization) }}">Knowledge base</a>

@@ -9,6 +9,7 @@ use App\Models\AnswerSource;
 use App\Models\Escalation;
 use App\Models\KnowledgeChunk;
 use App\Models\Organization;
+use App\Models\OrganizationChatUsage;
 use App\Models\Question;
 use App\Models\User;
 use App\Models\WidgetConversation;
@@ -32,18 +33,24 @@ class WidgetChatController extends Controller
         $organization = $this->resolveOrg($request);
         $settings = $organization->settings;
         $primaryColor = $settings?->chatbot_color_palette ?: '#d22630';
+        $assistantName = $settings?->assistant_name ?: ($organization->name . ' Assistant');
+        $welcomeMessage = $settings?->welcome_message ?: ("Hello! Welcome to " . $organization->name . ". How can we assist you today?");
+
+        $isWidgetEnabled = (bool) ($settings?->is_widget_enabled ?? true);
+        $isOnline = $isWidgetEnabled && ($settings?->assistant_status ?? 'active') === 'active';
 
         return response()->json([
             'success' => true,
             'widget' => [
                 'id' => $settings?->ensureWidgetPublicKey(),
-                'name' => $settings?->assistant_name ?: 'Aprilo Bot',
-                'display_name' => $settings?->assistant_name ?: 'Aprilo Bot',
+                'name' => $assistantName,
+                'display_name' => $assistantName,
                 'avatar_url' => '',
-                'welcome_message' => 'Hi! How can we help you today?',
-                'offline_message' => 'Our team is currently offline. Please leave a message.',
+                'welcome_message' => $welcomeMessage,
+                'offline_message' => 'Chat support is currently offline or unavailable.',
                 'position' => 'bottom-right',
-                'enabled' => true,
+                'enabled' => $isWidgetEnabled,
+                'is_disabled' => ! $isWidgetEnabled,
             ],
             'theme' => [
                 'primary_color' => $primaryColor,
@@ -54,23 +61,40 @@ class WidgetChatController extends Controller
             ],
             'behavior' => [
                 'auto_open' => false,
-                'show_launcher' => true,
+                'show_launcher' => $isWidgetEnabled,
                 'show_branding' => true,
                 'human_support_enabled' => (bool) ($settings?->live_chat_enabled ?? true),
             ],
             'ai' => [
-                'enabled' => true,
-                'display_name' => $settings?->assistant_name ?: 'Aprilo Bot',
+                'enabled' => $isWidgetEnabled,
+                'display_name' => $assistantName,
             ],
             'support' => [
-                'enabled' => true,
+                'enabled' => $isWidgetEnabled,
                 'business_hours_enabled' => false,
-                'is_online' => ($settings?->assistant_status ?? 'active') === 'active',
+                'is_online' => $isOnline,
             ],
-            'quick_actions' => [],
+            'quick_actions' => [
+                [
+                    'id' => 'services',
+                    'label' => 'Our Services',
+                    'message' => 'What services and solutions does ' . $organization->name . ' provide?',
+                ],
+                [
+                    'id' => 'support',
+                    'label' => 'Contact Support',
+                    'message' => 'How can I get in touch with the ' . $organization->name . ' support team?',
+                ],
+                [
+                    'id' => 'hours',
+                    'label' => 'Hours & Information',
+                    'message' => 'What are your operational hours and consultation details?',
+                ],
+            ],
             'organization' => [
                 'id' => $organization->id,
                 'name' => $organization->name,
+                'details' => $settings?->organization_details,
             ],
             'firebase' => [
                 'apiKey' => env('FIREBASE_API_KEY', 'AIzaSyDU5Ce2X5w35sZH81e5nX9i41xXj6YXoMg'),
@@ -92,6 +116,15 @@ class WidgetChatController extends Controller
             'page_title' => ['nullable', 'string', 'max:255'],
         ]);
         $organization = $this->resolveOrg($request);
+        $settings = $organization->settings;
+
+        if ($settings && (!($settings->is_widget_enabled ?? true) || $settings->assistant_status === 'paused')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Chat support is currently offline or disabled for this organization.',
+            ], 403);
+        }
+
         $customerId = (string) Str::uuid();
 
         $conversation = WidgetConversation::create([
@@ -132,6 +165,28 @@ class WidgetChatController extends Controller
             'content' => $validated['message'],
             'metadata' => $validated['metadata'] ?? null,
         ]);
+
+        $settings = $organization->settings;
+        if ($settings && (!($settings->is_widget_enabled ?? true) || $settings->assistant_status === 'paused')) {
+            $reply = $conversation->messages()->create([
+                'sender_type' => 'assistant',
+                'message_type' => 'text',
+                'content' => 'Chatbot is currently offline or disabled for this organization. Please reach out via our official contact channels.',
+                'sender_name' => $settings->assistant_name ?: ($organization->name . ' Assistant'),
+                'metadata' => ['answer_status' => 'offline'],
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'mode' => $conversation->mode,
+                'reply' => [
+                    'id' => $reply->id,
+                    'sender' => 'assistant',
+                    'content' => $reply->content,
+                    'timestamp' => $reply->created_at->toIso8601String(),
+                ],
+            ]);
+        }
 
         $result = $this->processQueryForOrg($organization, $validated['message']);
         $reply = $conversation->messages()->create([
@@ -182,6 +237,17 @@ class WidgetChatController extends Controller
         ]);
 
         $org = $this->resolveOrg($request);
+        $settings = $org->settings;
+
+        if ($settings && (!($settings->is_widget_enabled ?? true) || $settings->assistant_status === 'paused')) {
+            return response()->json([
+                'question_id' => (string) Str::uuid(),
+                'answer_text' => 'Chatbot is currently offline or disabled for this organization. Please reach out via our official contact channels.',
+                'answer_status' => 'offline',
+                'sources' => [],
+            ]);
+        }
+
         $result = $this->processQueryForOrg($org, $validated['question_text']);
 
         return response()->json($result);
@@ -331,8 +397,50 @@ class WidgetChatController extends Controller
             ];
         }
 
-        // 2. Advanced Bot Workflow: Validate Employee ID and fetch HR Resources
+        // 2. Organization Conversational Greeting & Introduction handling
         $settings = $org->settings;
+        $assistantName = $settings?->assistant_name ?: ($org->name . ' Assistant');
+        $orgDetails = trim($settings?->organization_details ?? '');
+
+        $cleanQuery = strtolower(trim($questionText));
+        $isGreeting = (bool) preg_match('/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|hola)(\s*|[!?.].*)$/i', $cleanQuery);
+        $isHelpQuery = (bool) preg_match('/^(how\s+can\s+you\s+help(\s+me)?|what\s+can\s+you\s+do|who\s+are\s+you|help\s*me?)(\s*|[!?.].*)$/i', $cleanQuery);
+
+        if ($isGreeting || $isHelpQuery) {
+            if ($isGreeting) {
+                $replyText = "Hello! I am {$assistantName}, the virtual assistant for {$org->name}. " .
+                    ($orgDetails ? "{$orgDetails} " : "") .
+                    "How can I assist you today?";
+            } else {
+                $replyText = "I am {$assistantName}, the dedicated AI assistant for {$org->name}. " .
+                    ($orgDetails ? "{$orgDetails} " : "") .
+                    "I can answer questions regarding our services, operating policies, and assist you with support requests. How may I help you today?";
+            }
+
+            $dummyUser = User::where('organization_id', $org->id)->first();
+            $question = Question::create([
+                'organization_id' => $org->id,
+                'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
+                'question_text' => $questionText,
+                'topic' => 'public_widget_chat_greeting',
+                'sensitivity_status' => 'normal',
+                'status' => 'answered',
+            ]);
+
+            // Record greeting query & estimated tokens
+            $promptTokens = max(1, (int) round(strlen($questionText) / 4));
+            $completionTokens = max(1, (int) round(strlen($replyText) / 4));
+            OrganizationChatUsage::recordUsage($org->id, $promptTokens, $completionTokens);
+
+            return [
+                'question_id' => $question->id,
+                'answer_text' => $replyText,
+                'answer_status' => 'answered',
+                'sources' => [],
+            ];
+        }
+
+        // 3. Advanced Bot Workflow: Validate Employee ID and fetch HR Resources
         $chatbotMode = $settings->chatbot_mode ?? 'document_only';
         $hrConnected = $settings->hr_api_connected ?? false;
 
@@ -421,9 +529,10 @@ class WidgetChatController extends Controller
 
         // Sort by score descending
         usort($ranked, fn ($a, $b) => $b['score'] <=> $a['score']);
-        $contexts = array_slice($ranked, 0, 4);
-
-        $aiResult = $this->aiService->answer($questionText, $contexts);
+        $aiResult = $this->aiService->answer($questionText, $contexts, [
+            'organization' => $org,
+            'settings' => $org->settings,
+        ]);
         $answerText = $aiResult['answer_text'];
         $answerStatus = $aiResult['answer_status'];
 
@@ -458,6 +567,15 @@ class WidgetChatController extends Controller
             'model_name' => $org->settings->gemini_model ?? 'gemini-flash-latest',
             'metadata' => ['context_count' => count($contexts)],
         ]);
+
+        // Record token and query consumption for the organization
+        $tokens = $aiResult['token_usage'] ?? [];
+        OrganizationChatUsage::recordUsage(
+            $org->id,
+            $tokens['prompt_tokens'] ?? 0,
+            $tokens['completion_tokens'] ?? 0,
+            $tokens['total_tokens'] ?? 0
+        );
 
         // Save result in memory cache
         $cacheResult = [
