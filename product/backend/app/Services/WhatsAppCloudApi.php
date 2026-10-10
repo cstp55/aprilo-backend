@@ -36,9 +36,7 @@ class WhatsAppCloudApi
                 $query['after'] = $cursor;
             }
 
-            $response = Http::withToken($accessToken)
-                ->acceptJson()
-                ->timeout(20)
+            $response = $this->client($accessToken)
                 ->get($url, $query);
 
             if (! $response->successful()) {
@@ -111,9 +109,7 @@ class WhatsAppCloudApi
             ];
         }
 
-        $response = Http::withToken($accessToken)
-            ->acceptJson()
-            ->timeout(20)
+        $response = $this->client($accessToken)
             ->post(sprintf(
                 'https://graph.facebook.com/%s/%s/messages',
                 config('services.whatsapp.api_version', 'v25.0'),
@@ -126,5 +122,72 @@ class WhatsAppCloudApi
         }
 
         return $response->json();
+    }
+
+    public function getSettings(): array
+    {
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
+
+        if (! $phoneNumberId || ! $accessToken) {
+            throw new RuntimeException('WhatsApp Cloud API credentials are not configured.');
+        }
+
+        $response = $this->client($accessToken)
+            ->get(sprintf(
+                'https://graph.facebook.com/%s/%s/settings',
+                config('services.whatsapp.api_version', 'v25.0'),
+                $phoneNumberId
+            ));
+
+        if (! $response->successful()) {
+            $message = $response->json('error.message') ?: 'Meta rejected the settings lookup.';
+            throw new RuntimeException(sprintf('Meta API error (%d): %s', $response->status(), $message));
+        }
+
+        return $response->json();
+    }
+
+    public function enableCalling(string $callIconVisibility = 'DEFAULT', string $callbackPermission = 'ENABLED'): array
+    {
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
+
+        if (! $phoneNumberId || ! $accessToken) {
+            throw new RuntimeException('WhatsApp Cloud API credentials are not configured.');
+        }
+
+        $response = $this->client($accessToken)
+            ->post(sprintf(
+                'https://graph.facebook.com/%s/%s/settings',
+                config('services.whatsapp.api_version', 'v25.0'),
+                $phoneNumberId
+            ), [
+                'calling' => [
+                    'status' => 'ENABLED',
+                    'call_icon_visibility' => $callIconVisibility,
+                    'callback_permission_status' => $callbackPermission,
+                ],
+            ]);
+
+        if (! $response->successful()) {
+            $message = $response->json('error.message') ?: 'Meta rejected the calling configuration update.';
+            throw new RuntimeException(sprintf('Meta API error (%d): %s', $response->status(), $message));
+        }
+
+        return $response->json();
+    }
+
+    private function client(string $accessToken): \Illuminate\Http\Client\PendingRequest
+    {
+        $client = Http::withToken($accessToken)
+            ->acceptJson()
+            ->timeout(20);
+
+        if (! config('services.whatsapp.verify_ssl', true)) {
+            $client = $client->withoutVerifying();
+        }
+
+        return $client;
     }
 }

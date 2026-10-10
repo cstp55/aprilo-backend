@@ -45,6 +45,7 @@ return [
         'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
         'access_token' => env('WHATSAPP_ACCESS_TOKEN'),
         'api_version' => env('WHATSAPP_API_VERSION', 'v25.0'),
+        'verify_ssl' => filter_var(env('WHATSAPP_VERIFY_SSL', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
     'slack' => [

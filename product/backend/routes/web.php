@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\Admin\WhatsAppCampaignController;
 use App\Http\Controllers\Admin\AgentSupportController;
 use App\Http\Controllers\Admin\ProductManagementController;
+use App\Http\Controllers\Admin\SupportAdminController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -49,6 +50,7 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::patch('/organizations/{organization}', [SuperAdminController::class, 'updateOrgStatus'])->name('organizations.update');
             Route::get('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'subscriptionAccess'])->name('organizations.subscriptions');
             Route::post('/organizations/{organization}/subscriptions', [SuperAdminController::class, 'grantSubscription'])->name('organizations.subscriptions.store');
+            Route::patch('/organizations/{organization}/subscriptions/{subscription}/payment-status', [SuperAdminController::class, 'updatePaymentStatus'])->name('organizations.subscriptions.payment-status');
             Route::get('/revenue', [SuperAdminController::class, 'revenue'])->name('revenue');
             Route::get('/monitoring', [SuperAdminController::class, 'chatMonitoring'])->name('monitoring');
             Route::post('/monitoring/sync-firebase', [SuperAdminController::class, 'syncFirebaseMonitoring'])->name('monitoring.sync-firebase');
@@ -123,6 +125,27 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::post('/settings/upgrade', [AdminConsoleController::class, 'upgradePlan'])->name('settings.upgrade');
         Route::get('/escalations', [AdminConsoleController::class, 'escalations'])->name('escalations');
         Route::patch('/escalations/{escalation}', [AdminConsoleController::class, 'updateEscalation'])->name('escalations.update');
+        
+        // Aprilo Support Desk Settings & Forms Builder
+        Route::prefix('support')->name('support.')->group(function (): void {
+            Route::get('/settings', [SupportAdminController::class, 'settings'])->name('settings');
+            Route::post('/settings/portal', [SupportAdminController::class, 'updatePortalSettings'])->name('portal.update');
+            Route::post('/settings/category', [SupportAdminController::class, 'storeCategory'])->name('categories.store');
+            Route::delete('/settings/category/{category}', [SupportAdminController::class, 'deleteCategory'])->name('categories.delete');
+            Route::post('/settings', [AdminConsoleController::class, 'updateSupportSettings'])->name('settings.update');
+            Route::post('/settings/sla', [AdminConsoleController::class, 'updateSupportSettings']);
+
+            // Forms Management & Dynamic Form Builder
+            Route::get('/forms', [SupportAdminController::class, 'formsIndex'])->name('forms');
+            Route::get('/forms/create', [SupportAdminController::class, 'createForm'])->name('forms.create');
+            Route::post('/forms', [SupportAdminController::class, 'storeForm'])->name('forms.store');
+            Route::get('/forms/{form}/edit', [SupportAdminController::class, 'editForm'])->name('forms.edit');
+            Route::put('/forms/{form}', [SupportAdminController::class, 'updateForm'])->name('forms.update');
+            Route::post('/forms/{form}/duplicate', [SupportAdminController::class, 'duplicateForm'])->name('forms.duplicate');
+            Route::post('/forms/{form}/publish', [SupportAdminController::class, 'publishForm'])->name('forms.publish');
+            Route::post('/forms/{form}/archive', [SupportAdminController::class, 'archiveForm'])->name('forms.archive');
+            Route::get('/forms/{form}/preview', [SupportAdminController::class, 'previewForm'])->name('forms.preview');
+        });
         
         // HR Operations
         Route::get('/leaves', [AdminConsoleController::class, 'leaves'])->name('leaves');

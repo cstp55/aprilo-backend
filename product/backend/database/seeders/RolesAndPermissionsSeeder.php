@@ -45,6 +45,8 @@ class RolesAndPermissionsSeeder extends Seeder
             ['category' => 'support', 'slug' => 'support.tickets.view', 'name' => 'View Technical Tickets', 'description' => 'Inspect SaaS bug tickets and developer escalations.'],
             ['category' => 'support', 'slug' => 'support.tickets.manage', 'name' => 'Manage Technical Tickets', 'description' => 'Route, prioritize, and close technical support tickets.'],
             ['category' => 'support', 'slug' => 'support.sla.manage', 'name' => 'Manage SLA Tracking', 'description' => 'Configure response SLAs and automatic escalation alerts.'],
+            ['category' => 'support', 'slug' => 'support.settings.manage', 'name' => 'Manage Support Settings', 'description' => 'Configure public portal branding, tracking, and categories.'],
+            ['category' => 'support', 'slug' => 'support.forms.manage', 'name' => 'Manage Dynamic Ticket Forms', 'description' => 'Build, edit, and publish dynamic customer intake forms.'],
             ['category' => 'support', 'slug' => 'support.diagnostics.view', 'name' => 'Inspect Diagnostic Logs', 'description' => 'View diagnostic context, API manuals, and runbooks.'],
 
             // Aprilo HR permissions
@@ -108,7 +110,7 @@ class RolesAndPermissionsSeeder extends Seeder
         $productMappings = [
             'aprilo-ai' => ['dashboard.view', 'analytics.view', 'widget.settings', 'widget.script', 'live_chat.view', 'chatbot.custom_automations', 'knowledge.sources.view', 'knowledge.sources.manage', 'escalations.view', 'escalations.manage', 'logs.view'],
             'aprilo-chatbot' => ['dashboard.view', 'widget.settings', 'widget.script', 'live_chat.view', 'plugins.connect', 'chatbot.channels.manage', 'chatbot.custom_automations', 'logs.view'],
-            'aprilo-support' => ['dashboard.view', 'support.dashboard.view', 'support.tickets.view', 'support.tickets.manage', 'escalations.view', 'escalations.manage', 'support.sla.manage', 'support.diagnostics.view', 'knowledge.sources.view', 'logs.view'],
+            'aprilo-support' => ['dashboard.view', 'support.dashboard.view', 'support.tickets.view', 'support.tickets.manage', 'escalations.view', 'escalations.manage', 'support.sla.manage', 'support.settings.manage', 'support.forms.manage', 'support.diagnostics.view', 'knowledge.sources.view', 'logs.view'],
             'aprilo-sales' => ['dashboard.view', 'sales.dashboard.view', 'sales.leads.view', 'sales.campaigns.manage', 'sales.crm.view', 'sales.crm.manage', 'whatsapp.campaigns.manage', 'logs.view'],
             'aprilo-hr' => ['dashboard.view', 'hr.dashboard.view', 'knowledge.sources.view', 'knowledge.sources.manage', 'employee.leaves.manage', 'employee.wfh.manage', 'employee.validate', 'employee.idcards.manage', 'employee.onboarding.manage', 'employee.private_queries.view', 'logs.view'],
             'aprilo-ecommerce' => ['dashboard.view', 'ecommerce.dashboard.view', 'ecommerce.platforms.connect', 'ecommerce.products.sync', 'ecommerce.orders.sync', 'ecommerce.autosync.manage', 'ecommerce.embeddings.refresh', 'ecommerce.licenses.manage', 'logs.view'],

@@ -98,6 +98,42 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/settings', [SettingsController::class, 'show']);
         Route::patch('/settings', [SettingsController::class, 'update']);
     });
+
+    // Aprilo Support Core API
+    Route::prefix('support')->group(function (): void {
+        Route::get('/config', [\App\Http\Controllers\Api\Support\SupportConfigController::class, 'show']);
+        Route::post('/config', [\App\Http\Controllers\Api\Support\SupportConfigController::class, 'update']);
+        Route::get('/inbox/summary', [\App\Http\Controllers\Api\Support\SupportInboxController::class, 'summary']);
+        Route::get('/tickets/categories', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'categories']);
+        Route::get('/tickets', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'index']);
+        Route::post('/tickets', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'store']);
+        Route::get('/tickets/{ticket}', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'show']);
+        Route::post('/tickets/{ticket}/transition', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'transition']);
+        Route::post('/tickets/{ticket}/priority', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'updatePriority']);
+        Route::post('/tickets/{ticket}/assign', [\App\Http\Controllers\Api\Support\SupportTicketController::class, 'assign']);
+        Route::get('/tickets/{ticket}/comments', [\App\Http\Controllers\Api\Support\SupportTicketCommentController::class, 'index']);
+        Route::post('/tickets/{ticket}/comments', [\App\Http\Controllers\Api\Support\SupportTicketCommentController::class, 'store']);
+
+        // AI Draft Workflow (Mandatory Human Approval)
+        Route::post('/tickets/{ticket}/drafts/generate', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'generate']);
+        Route::get('/tickets/{ticket}/drafts', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'index']);
+        Route::get('/drafts/{draft}', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'show']);
+        Route::patch('/drafts/{draft}/edit', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'edit']);
+        Route::post('/drafts/{draft}/reject', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'reject']);
+        Route::post('/drafts/{draft}/approve', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'approve']);
+        Route::post('/drafts/{draft}/feedback', [\App\Http\Controllers\Api\Support\SupportAiDraftController::class, 'feedback']);
+
+        // Dynamic Ticket Forms API
+        Route::get('/forms', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'index']);
+        Route::get('/forms/{form}', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'show']);
+        Route::post('/forms/{form}/submit', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'submit']);
+    });
+});
+
+// Public Support Portal Form Intake & Fetch
+Route::prefix('support/public')->group(function (): void {
+    Route::get('/forms/{form}', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'show'])->middleware('throttle:120,1');
+    Route::post('/forms/{form}/submit', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'submit'])->middleware('throttle:60,1');
 });
 
 // Customer & Organization Onboarding API
@@ -110,3 +146,11 @@ Route::prefix('onboarding')->group(function (): void {
 
 // Razorpay Webhooks
 Route::post('/webhooks/razorpay', [\App\Http\Controllers\Api\RazorpayWebhookController::class, 'handle'])->middleware('throttle:120,1');
+
+// Support Channel Webhooks (WhatsApp, Email, Website)
+Route::prefix('webhooks/support')->group(function (): void {
+    Route::get('/whatsapp', [\App\Http\Controllers\Api\Support\SupportWebhookController::class, 'verifyWhatsApp']);
+    Route::post('/whatsapp', [\App\Http\Controllers\Api\Support\SupportWebhookController::class, 'handleWhatsApp']);
+    Route::post('/email', [\App\Http\Controllers\Api\Support\SupportWebhookController::class, 'handleEmail']);
+    Route::post('/website', [\App\Http\Controllers\Api\Support\SupportWebhookController::class, 'handleWebsite']);
+});

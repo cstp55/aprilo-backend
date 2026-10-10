@@ -1024,6 +1024,60 @@ class AdminConsoleController extends Controller
         return back()->with('status', "Your Chatbot Widget is now {$statusText}.");
     }
 
+    public function supportSettings(Request $request): View
+    {
+        $organization = $request->user()->organization;
+        $this->authorizeAdmin($request);
+
+        $categories = \App\Models\Support\SupportTicketCategory::where('organization_id', $organization->id)->get();
+        $slaPolicies = \App\Models\Support\SupportSlaPolicy::where('organization_id', $organization->id)->get()->keyBy('priority');
+
+        return view('admin.support-settings', [
+            'organization' => $organization,
+            'categories' => $categories,
+            'slaPolicies' => $slaPolicies,
+            'settings' => $organization->settings,
+        ]);
+    }
+
+    public function updateSupportSettings(Request $request): RedirectResponse
+    {
+        $organization = $request->user()->organization;
+        $this->authorizeAdmin($request);
+
+        $validated = $request->validate([
+            'urgent_response_time' => ['required', 'integer', 'min:5'],
+            'urgent_resolution_time' => ['required', 'integer', 'min:10'],
+            'high_response_time' => ['required', 'integer', 'min:10'],
+            'high_resolution_time' => ['required', 'integer', 'min:30'],
+            'normal_response_time' => ['required', 'integer', 'min:15'],
+            'normal_resolution_time' => ['required', 'integer', 'min:60'],
+            'low_response_time' => ['required', 'integer', 'min:30'],
+            'low_resolution_time' => ['required', 'integer', 'min:120'],
+        ]);
+
+        $priorities = [
+            'urgent' => [$validated['urgent_response_time'], $validated['urgent_resolution_time']],
+            'high' => [$validated['high_response_time'], $validated['high_resolution_time']],
+            'normal' => [$validated['normal_response_time'], $validated['normal_resolution_time']],
+            'low' => [$validated['low_response_time'], $validated['low_resolution_time']],
+        ];
+
+        foreach ($priorities as $pri => [$resp, $resol]) {
+            \App\Models\Support\SupportSlaPolicy::updateOrCreate(
+                ['organization_id' => $organization->id, 'priority' => $pri],
+                [
+                    'name' => ucfirst($pri) . ' Priority SLA',
+                    'response_time_minutes' => $resp,
+                    'resolution_time_minutes' => $resol,
+                    'is_active' => true,
+                ]
+            );
+        }
+
+        return redirect()->route('admin.support.settings')->with('status', 'Aprilo Support SLA policies successfully updated.');
+    }
+
     private function authorizeAdmin(Request $request): void
     {
         $user = $request->user();

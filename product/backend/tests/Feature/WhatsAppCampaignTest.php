@@ -29,9 +29,9 @@ class WhatsAppCampaignTest extends TestCase
                 'recipient_mode' => 'users',
                 'user_ids' => [$customer->id],
                 'message_type' => 'template',
-                'template_name' => 'monthly_update',
+                'template_name' => 'welcome_customer',
                 'template_language' => 'en_US',
-                'template_parameters' => "April\nCustomer One",
+                'template_parameters' => 'April',
                 'consent_confirmed' => '1',
             ])
             ->assertRedirect(route('admin.super.whatsapp-campaigns'))
@@ -40,7 +40,7 @@ class WhatsAppCampaignTest extends TestCase
         $this->assertDatabaseHas('whatsapp_campaigns', [
             'name' => 'April update',
             'message_type' => 'template',
-            'template_name' => 'monthly_update',
+            'template_name' => 'welcome_customer',
             'status' => 'queued',
         ]);
         $this->assertDatabaseHas('whatsapp_campaign_recipients', [
@@ -165,7 +165,7 @@ class WhatsAppCampaignTest extends TestCase
         Cache::forget('whatsapp.approved_templates.' . hash('sha256', 'business-123'));
 
         $templates = [[
-            'name' => 'monthly_update',
+            'name' => 'welcome_customer',
             'status' => 'APPROVED',
             'language' => 'en_US',
             'category' => 'UTILITY',

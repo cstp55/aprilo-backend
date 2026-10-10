@@ -193,7 +193,7 @@ class SuperAdminController extends Controller
             'welcome_message' => ['nullable', 'string', 'max:1000'],
             'organization_details' => ['nullable', 'string', 'max:5000'],
             'custom_system_prompt' => ['nullable', 'string', 'max:5000'],
-            'restriction_template' => ['required', Rule::in(['general_faq', 'strict_retrieval', 'hr_policy', 'custom'])],
+            'restriction_template' => ['nullable', Rule::in(['general_faq', 'strict_retrieval', 'hr_policy', 'custom'])],
             'eligibility_criteria' => ['nullable', 'string', 'max:5000'],
             'strict_context_enforcement' => ['nullable', 'boolean'],
         ]);
@@ -421,12 +421,14 @@ class SuperAdminController extends Controller
                 'status' => $validated['status'],
             ]);
 
-            OrganizationSetting::create([
-                'organization_id' => $organization->id,
-                'assistant_name' => $organization->name . ' Assistant',
-                'assistant_status' => 'active',
-                'live_chat_enabled' => true,
-            ]);
+            OrganizationSetting::updateOrCreate(
+                ['organization_id' => $organization->id],
+                [
+                    'assistant_name' => $organization->name . ' Assistant',
+                    'assistant_status' => 'active',
+                    'live_chat_enabled' => true,
+                ]
+            );
 
             User::create([
                 'organization_id' => $organization->id,

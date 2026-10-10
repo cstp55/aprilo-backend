@@ -41,6 +41,16 @@ class Organization extends Model
         return $this->hasOne(OrganizationSetting::class);
     }
 
+    public function supportPortalSetting(): HasOne
+    {
+        return $this->hasOne(\App\Models\Support\SupportPortalSetting::class);
+    }
+
+    public function supportTicketForms(): HasMany
+    {
+        return $this->hasMany(\App\Models\Support\SupportTicketForm::class);
+    }
+
     public function users(): HasMany
     {
         return $this->hasMany(User::class);

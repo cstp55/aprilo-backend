@@ -25,7 +25,7 @@ class GeminiAiProvider implements AiProviderInterface
         }
 
         // Limit context to top 3 items to optimize token usage and keep context summarized
-        $slicedContext = array_slice($context, 0, 3);
+        $slicedContext = array_values(array_slice($context, 0, 3));
         $contextText = "";
         $sources = [];
 

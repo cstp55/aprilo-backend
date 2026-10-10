@@ -75,6 +75,12 @@ class NavigationService
                         'icon' => 'message-circle',
                         'active' => request()->routeIs('admin.super.whatsapp-campaigns*'),
                     ],
+                    [
+                        'title' => 'Aprilo Support Settings',
+                        'route' => 'admin.support.settings',
+                        'icon' => 'life-buoy',
+                        'active' => request()->routeIs('admin.support*'),
+                    ],
                 ],
             ];
         }
@@ -323,7 +329,44 @@ class NavigationService
             ];
         }
 
-        // 7. Administration & Settings
+        // 7. Aprilo Support Desk & Forms
+        $canAccessSupport = $user->isSuperAdmin()
+            || $user->hasPermission('support.settings.manage')
+            || $user->hasPermission('support.forms.manage')
+            || $user->hasPermission('support.tickets.view')
+            || $user->hasPermission('support.dashboard.view')
+            || ($owner && ($organization?->hasActiveProductCategory('support_saas') || $organization?->hasActiveProductCategory('aprilo-support') || $organization?->hasActiveProductCategory('support')));
+
+        if ($canAccessSupport) {
+            $supportNavItems = [];
+
+            if ($user->isSuperAdmin() || $owner || $user->hasPermission('support.settings.manage') || $user->hasPermission('support.sla.manage') || $user->hasPermission('support.dashboard.view')) {
+                $supportNavItems[] = [
+                    'title' => 'Portal & SLA Settings',
+                    'route' => 'admin.support.settings',
+                    'icon' => 'settings',
+                    'active' => request()->routeIs('admin.support.settings*'),
+                ];
+            }
+
+            if ($user->isSuperAdmin() || $owner || $user->hasPermission('support.forms.manage') || $user->hasPermission('support.settings.manage') || $user->hasPermission('support.tickets.manage')) {
+                $supportNavItems[] = [
+                    'title' => 'Ticket Forms Builder',
+                    'route' => 'admin.support.forms',
+                    'icon' => 'file-text',
+                    'active' => request()->routeIs('admin.support.forms*'),
+                ];
+            }
+
+            if (! empty($supportNavItems)) {
+                $menu[] = [
+                    'header' => 'Aprilo Support',
+                    'items' => $supportNavItems,
+                ];
+            }
+        }
+
+        // 8. Administration & Settings
         $adminItems = [];
 
         if ((! $owner || $canAccessAiKnowledge) && $user->hasPermission('roles.manage')) {

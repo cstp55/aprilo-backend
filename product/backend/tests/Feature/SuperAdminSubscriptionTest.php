@@ -72,6 +72,29 @@ class SuperAdminSubscriptionTest extends TestCase
             'organization_id' => $customer->id,
             'event_type' => 'MANUAL_SUBSCRIPTION_GRANTED',
         ]);
+
+        // Verify viewing page with active subscriptions renders payment status form without error
+        $this->actingAs($superAdmin)
+            ->get('/admin/super/organizations/' . $customer->id . '/subscriptions')
+            ->assertOk()
+            ->assertSee('Manual payment status')
+            ->assertSee('Update status');
+
+        // Test updating subscription payment status
+        $this->actingAs($superAdmin)
+            ->patch('/admin/super/organizations/' . $customer->id . '/subscriptions/' . $subscription->id . '/payment-status', [
+                'status' => 'past_due',
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('subscriptions', [
+            'id' => $subscription->id,
+            'status' => 'past_due',
+        ]);
+        $this->assertDatabaseHas('organization_entitlements', [
+            'subscription_id' => $subscription->id,
+            'status' => 'suspended',
+        ]);
     }
 
     public function test_organization_owner_can_enter_admin_console_but_cannot_use_super_admin_routes(): void
