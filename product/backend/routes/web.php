@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\RoleManagementController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\Admin\WhatsAppCampaignController;
 use App\Http\Controllers\Admin\AgentSupportController;
+use App\Http\Controllers\Admin\ProductManagementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -59,6 +60,15 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::get('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'index'])->name('whatsapp-campaigns');
             Route::get('/whatsapp-campaigns/templates', [WhatsAppCampaignController::class, 'templates'])->name('whatsapp-campaigns.templates');
             Route::post('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'store'])->name('whatsapp-campaigns.store');
+
+            // Products & Permissions Catalog Management
+            Route::get('/products', [ProductManagementController::class, 'index'])->name('products');
+            Route::get('/products/create', [ProductManagementController::class, 'create'])->name('products.create');
+            Route::post('/products', [ProductManagementController::class, 'store'])->name('products.store');
+            Route::get('/products/{product}/edit', [ProductManagementController::class, 'edit'])->name('products.edit');
+            Route::patch('/products/{product}', [ProductManagementController::class, 'update'])->name('products.update');
+            Route::post('/organizations/{organization}/products', [ProductManagementController::class, 'assignOrganizationProduct'])->name('organizations.products.store');
+            Route::delete('/organizations/{organization}/products/{product}', [ProductManagementController::class, 'revokeOrganizationProduct'])->name('organizations.products.destroy');
         });
         Route::get('/super', function () { return redirect()->route('admin.super.dashboard'); })->name('super');
 

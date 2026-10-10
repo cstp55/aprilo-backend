@@ -36,9 +36,16 @@ class AuthController extends Controller
 
         $agent->update(['availability_status' => 'online', 'last_seen_at' => now()]);
 
+        $settings = $agent->organization->settings ?? $agent->organization->settings()->firstOrCreate(['organization_id' => $agent->organization->id]);
+        $widgetKey = $settings ? $settings->ensureWidgetPublicKey() : null;
+
         return response()->json([
             'token' => $agent->user->createToken('agent-support')->plainTextToken,
-            'organization' => ['id' => $agent->organization->id, 'name' => $agent->organization->name],
+            'organization' => [
+                'id' => $agent->organization->id,
+                'name' => $agent->organization->name,
+                'widget_key' => $widgetKey,
+            ],
             'agent' => [
                 'id' => $agent->id,
                 'user_id' => $agent->user_id,
@@ -50,7 +57,44 @@ class AuthController extends Controller
         ]);
     }
 
-    public function register(Request $request): JsonResponse
+    
+    public function agentOrganization(Request $request): JsonResponse
+    {
+        $username = strtolower(trim((string) ($request->input('username') ?? $request->query('username') ?? '')));
+
+        if ($username === '') {
+            return response()->json(['message' => 'Username is required.'], 422);
+        }
+
+        $agent = AgentSupport::with(['user', 'organization.settings'])
+            ->whereHas('user', fn ($query) => $query->where('username', $username))
+            ->first();
+
+        if (! $agent || ! $agent->organization) {
+            return response()->json(['message' => 'Agent or organization not found for this username.'], 404);
+        }
+
+        $settings = $agent->organization->settings ?? $agent->organization->settings()->firstOrCreate(['organization_id' => $agent->organization->id]);
+        $widgetKey = $settings ? $settings->ensureWidgetPublicKey() : null;
+
+        return response()->json([
+            'organization' => [
+                'id' => $agent->organization->id,
+                'name' => $agent->organization->name,
+                'widget_key' => $widgetKey,
+            ],
+            'agent' => [
+                'id' => $agent->id,
+                'user_id' => $agent->user_id,
+                'full_name' => $agent->user->name,
+                'username' => $agent->user->username,
+                'nickname' => $agent->nickname,
+                'availability_status' => $agent->availability_status,
+            ],
+        ]);
+    }
+
+public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],

@@ -112,18 +112,36 @@ class Organization extends Model
 
     public function hasActiveProductCategory(string $category): bool
     {
+        // Check direct assigned organization products
+        $hasDirectProduct = $this->products()
+            ->wherePivot('status', 'active')
+            ->where(function ($query): void {
+                $query->whereNull('organization_products.expires_at')
+                    ->orWhere('organization_products.expires_at', '>=', now());
+            })
+            ->where(function ($query) use ($category): void {
+                $query->where('products.category', $category)->orWhere('products.slug', $category);
+            })
+            ->exists();
+
+        if ($hasDirectProduct) {
+            return true;
+        }
+
         if ($category === 'ecommerce') {
-            return $this->ecommerceLicenses()
+            if ($this->ecommerceLicenses()
                 ->where('status', 'active')
                 ->where(function ($query): void {
                     $query->whereNull('expires_at')->orWhere('expires_at', '>=', now());
                 })
-                ->exists();
+                ->exists()) {
+                return true;
+            }
         }
 
         $hasSubscription = $this->subscriptions()
             ->whereIn('status', ['trialing', 'active'])
-            ->whereHas('product', fn ($query) => $query->where('category', $category))
+            ->whereHas('product', fn ($query) => $query->where('category', $category)->orWhere('slug', $category))
             ->where(function ($query): void {
                 $query->whereNull('current_cycle_end')->orWhere('current_cycle_end', '>=', now());
             })
@@ -137,7 +155,34 @@ class Organization extends Model
         return $hasSubscription;
     }
 
+    public function hasActiveProduct(string $productSlug): bool
+    {
+        return $this->hasActiveProductCategory($productSlug);
+    }
+
+    public function activeProducts()
+    {
+        return Product::where(function ($query) {
+            $query->whereHas('organizations', function ($q) {
+                $q->where('organization_id', $this->id)
+                    ->where('organization_products.status', 'active')
+                    ->where(function ($sq) {
+                        $sq->whereNull('organization_products.expires_at')
+                            ->orWhere('organization_products.expires_at', '>=', now());
+                    });
+            })->orWhereHas('subscriptions', function ($q) {
+                $q->where('organization_id', $this->id)
+                    ->whereIn('status', ['trialing', 'active'])
+                    ->where(function ($sq) {
+                        $sq->whereNull('current_cycle_end')
+                            ->orWhere('current_cycle_end', '>=', now());
+                    });
+            });
+        });
+    }
+
     public function supportsLiveChatAgents(): bool
+
     {
         $settings = $this->settings;
 
@@ -154,10 +199,18 @@ class Organization extends Model
         return in_array($feature, $features, true);
     }
 
+    public function products(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'organization_products')
+            ->withPivot(['status', 'expires_at', 'metadata'])
+            ->withTimestamps();
+    }
+
     public function subscriptions(): HasMany
     {
         return $this->hasMany(Subscription::class);
     }
+
 
     public function activeSubscription(): HasOne
     {

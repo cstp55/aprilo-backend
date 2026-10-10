@@ -17,25 +17,39 @@ class RoleManagementController extends Controller
     {
         $this->authorizeRoles($request);
 
+        $isSuper = $request->user()->isSuperAdmin();
         $orgId = $request->user()->organization_id;
 
-        $roles = Role::whereNull('organization_id')
-            ->orWhere('organization_id', $orgId)
-            ->withCount(['permissions', 'users'])
-            ->orderBy('is_system', 'desc')
-            ->latest()
-            ->get();
+        if ($isSuper) {
+            $roles = Role::withCount(['permissions', 'users'])
+                ->orderBy('is_system', 'desc')
+                ->latest()
+                ->get();
 
-        $users = User::where('organization_id', $orgId)->with('roleModel')->get();
+            $users = User::with(['roleModel', 'organization'])
+                ->orderBy('name')
+                ->paginate(30);
+        } else {
+            $roles = Role::whereNull('organization_id')
+                ->orWhere('organization_id', $orgId)
+                ->withCount(['permissions', 'users'])
+                ->orderBy('is_system', 'desc')
+                ->latest()
+                ->get();
 
-        return view('admin.roles.index', compact('roles', 'users'));
+            $users = User::where('organization_id', $orgId)
+                ->with('roleModel')
+                ->get();
+        }
+
+        return view('admin.roles.index', compact('roles', 'users', 'isSuper'));
     }
 
     public function create(Request $request): View
     {
         $this->authorizeRoles($request);
 
-        $permissions = Permission::all()->groupBy('category');
+        $permissions = Permission::orderBy('category')->orderBy('name')->get()->groupBy('category');
 
         return view('admin.roles.create', compact('permissions'));
     }
@@ -54,7 +68,7 @@ class RoleManagementController extends Controller
         $slug = Str::slug($validated['name']) . '_' . Str::random(4);
 
         $role = Role::create([
-            'organization_id' => $request->user()->organization_id,
+            'organization_id' => $request->user()->isSuperAdmin() ? null : $request->user()->organization_id,
             'name' => $validated['name'],
             'slug' => $slug,
             'description' => $validated['description'] ?? null,
@@ -72,18 +86,26 @@ class RoleManagementController extends Controller
     public function edit(Request $request, Role $role): View
     {
         $this->authorizeRoles($request);
-        abort_if($role->organization_id && $role->organization_id !== $request->user()->organization_id, 404);
 
-        $permissions = Permission::all()->groupBy('category');
+        $isSuper = $request->user()->isSuperAdmin();
+        if (! $isSuper && $role->organization_id && $role->organization_id !== $request->user()->organization_id) {
+            abort(404);
+        }
+
+        $permissions = Permission::orderBy('category')->orderBy('name')->get()->groupBy('category');
         $rolePermissions = $role->permissions->pluck('id')->toArray();
 
-        return view('admin.roles.edit', compact('role', 'permissions', 'rolePermissions'));
+        return view('admin.roles.edit', compact('role', 'permissions', 'rolePermissions', 'isSuper'));
     }
 
     public function update(Request $request, Role $role): RedirectResponse
     {
         $this->authorizeRoles($request);
-        abort_if($role->organization_id && $role->organization_id !== $request->user()->organization_id, 404);
+
+        $isSuper = $request->user()->isSuperAdmin();
+        if (! $isSuper && $role->organization_id && $role->organization_id !== $request->user()->organization_id) {
+            abort(404);
+        }
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -92,7 +114,7 @@ class RoleManagementController extends Controller
             'permissions.*' => ['uuid', 'exists:permissions,id'],
         ]);
 
-        if (! $role->is_system) {
+        if (! $role->is_system || $isSuper) {
             $role->update([
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
@@ -109,7 +131,11 @@ class RoleManagementController extends Controller
     public function assignUserRole(Request $request, User $user): RedirectResponse
     {
         $this->authorizeRoles($request);
-        abort_unless($user->organization_id === $request->user()->organization_id, 404);
+
+        $isSuper = $request->user()->isSuperAdmin();
+        if (! $isSuper && $user->organization_id !== $request->user()->organization_id) {
+            abort(404);
+        }
 
         $validated = $request->validate([
             'role_id' => ['required', 'uuid', 'exists:roles,id'],

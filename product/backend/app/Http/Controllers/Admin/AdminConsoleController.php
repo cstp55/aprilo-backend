@@ -31,13 +31,26 @@ class AdminConsoleController extends Controller
 
         $organization = $request->user()->organization;
 
+        $hasAnyProduct = $organization?->hasActiveProductCategory('ai_support')
+            || $organization?->hasActiveProductCategory('chatbot')
+            || $organization?->hasActiveProductCategory('support_saas')
+            || $organization?->hasActiveProductCategory('hr')
+            || $organization?->hasActiveProductCategory('ecommerce')
+            || $organization?->hasActiveProductCategory('sales_crm')
+            || $organization?->hasActiveProductCategory('infrastructure')
+            || $organization?->hasActiveProductCategory('financial')
+            || ($organization && $organization->products()->wherePivot('status', 'active')->exists());
+
         if ($request->user()->role_slug === 'owner'
             && ! $organization?->hasActiveProductCategory('ai_support')
+            && ! $organization?->hasActiveProductCategory('chatbot')
+            && ! $organization?->hasActiveProductCategory('support_saas')
+            && ! $organization?->hasActiveProductCategory('hr')
             && $organization?->hasActiveProductCategory('ecommerce')) {
             return redirect()->route('admin.ecommerce.dashboard');
         }
 
-        if ($request->user()->role_slug === 'owner' && ! $organization?->hasActiveProductCategory('ai_support')) {
+        if ($request->user()->role_slug === 'owner' && ! $hasAnyProduct) {
             return redirect()->route('admin.settings.pricing');
         }
 
@@ -102,7 +115,7 @@ class AdminConsoleController extends Controller
             'wfhRequests' => $wfhRequests,
             'employees' => $employees,
             'idcards' => $idcards,
-            'activeProductCategories' => collect(['ai_support', 'ecommerce'])
+            'activeProductCategories' => collect(['ai_support', 'chatbot', 'support_saas', 'hr', 'ecommerce', 'sales_crm', 'infrastructure', 'financial'])
                 ->filter(fn (string $category): bool => $organization->hasActiveProductCategory($category))
                 ->values()
                 ->all(),

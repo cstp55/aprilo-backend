@@ -12,6 +12,22 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
 Route::post('/auth/agent-login', [AuthController::class, 'agentLogin']);
+Route::match(['get', 'post'], '/auth/agent-organization', [AuthController::class, 'agentOrganization']);
+Route::get('/widget/organization-by-key', function (\Illuminate\Http\Request $request) {
+    $widgetKey = $request->query('widget_key') ?? $request->input('widget_key');
+    if (! $widgetKey) {
+        return response()->json(['message' => 'widget_key is required.'], 400);
+    }
+    $setting = \App\Models\OrganizationSetting::with('organization')->where('public_widget_key', $widgetKey)->first();
+    if (! $setting || ! $setting->organization) {
+        return response()->json(['message' => 'Invalid widget key.'], 404);
+    }
+    return response()->json([
+        'organization_id' => $setting->organization_id,
+        'organization_name' => $setting->organization->name,
+        'widget_key' => $setting->public_widget_key,
+    ]);
+});
 Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::get('/me', [AuthController::class, 'me'])->middleware('auth:sanctum');
 Route::post('/auth/validate-employee', [AuthController::class, 'validateEmployee'])->middleware('auth:sanctum');

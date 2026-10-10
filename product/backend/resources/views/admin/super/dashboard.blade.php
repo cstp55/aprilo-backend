@@ -9,6 +9,14 @@
             <h1>Super Administrator Dashboard</h1>
             <p class="help">Cross-tenant overview of all organizations, users, revenue, live agent inquiries, and AI services.</p>
         </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <a href="{{ route('admin.super.products') }}" class="button" style="width: auto; background: #4f46e5; border-color: #4338ca; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);">
+                📦 Products & Permissions
+            </a>
+            <a href="{{ route('admin.super.organizations') }}" class="button" style="width: auto; background: #ffffff; color: var(--ink); border: 1px solid var(--line);">
+                🏢 Organizations
+            </a>
+        </div>
     </div>
 
     <div class="grid grid-4" style="margin-bottom: 24px;">

@@ -40,6 +40,79 @@
         </div>
     </section>
 
+    <!-- Licensed Products & Entitlements -->
+    <section class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+                <h2 style="font-size: 18px; margin: 0;">Licensed Products & Feature Access</h2>
+                <p class="help" style="margin: 4px 0 0;">Products currently active for this tenant. Unlocks corresponding features for tenant owners and roles.</p>
+            </div>
+            <a class="button" style="width: auto; font-size: 13px; padding: 7px 14px; background: #ffffff; color: var(--ink); border: 1px solid var(--line);" href="{{ route('admin.super.products') }}">
+                Product Catalog →
+            </a>
+        </div>
+
+        <div style="display: grid; gap: 12px; margin-bottom: 20px;">
+            @forelse ($organization->products as $orgProd)
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong style="font-size: 15px; color: var(--ink);">{{ $orgProd->name }}</strong>
+                            <span style="font-size: 11px; background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-weight: 700;">
+                                {{ ucfirst(str_replace('_', ' ', $orgProd->category)) }}
+                            </span>
+                            <span style="font-size: 11px; background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 4px; font-weight: 700;">
+                                ● Active
+                            </span>
+                        </div>
+                        <div style="font-size: 12px; color: var(--muted); margin-top: 3px;">
+                            {{ $orgProd->permissions->count() }} bundled permissions · Valid until: {{ $orgProd->pivot->expires_at ? \Carbon\Carbon::parse($orgProd->pivot->expires_at)->format('M d, Y') : 'Permanent' }}
+                        </div>
+                    </div>
+                    <div>
+                        <form method="POST" action="{{ route('admin.super.organizations.products.destroy', [$organization, $orgProd]) }}" onsubmit="return confirm('Revoke access to this product for {{ $organization->name }}?');" style="margin: 0; padding: 0; border: 0;">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" style="background: transparent; border: 1px solid #fca5a5; color: #dc2626; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                                Revoke License
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            @empty
+                <div style="color: var(--muted); font-size: 13.5px; padding: 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    No direct products currently licensed. Check subscriptions or grant access below.
+                </div>
+            @endforelse
+        </div>
+
+        <!-- Grant Product Form -->
+        <div style="border-top: 1px solid var(--line); padding-top: 16px;">
+            <h3 style="font-size: 15px; font-weight: 700; margin-bottom: 12px;">Grant Product License to Tenant</h3>
+            <form method="POST" action="{{ route('admin.super.organizations.products.store', $organization) }}" style="margin: 0; padding: 0; border: 0; box-shadow: none;">
+                @csrf
+                <div class="grid grid-3" style="align-items: end;">
+                    <label class="field">Select Product
+                        <select name="product_id" required>
+                            <option value="">-- Choose Product --</option>
+                            @foreach ($allProducts as $p)
+                                <option value="{{ $p->id }}">{{ $p->name }} ({{ ucfirst($p->category) }})</option>
+                            @endforeach
+                        </select>
+                    </label>
+                    <label class="field">License Expiration Date (Optional)
+                        <input name="expires_at" type="date" value="{{ now()->addYear()->format('Y-m-d') }}">
+                    </label>
+                    <div>
+                        <button class="button" type="submit" style="width: auto; background: #4f46e5; border-color: #4338ca;">
+                            + Grant Product License
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+
     <section>
         <div style="margin-bottom: 14px;">
             <h2 style="font-size: 18px; margin: 0;">Organization owner accounts</h2>

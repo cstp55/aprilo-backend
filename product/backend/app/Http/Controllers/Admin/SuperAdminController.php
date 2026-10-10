@@ -123,13 +123,17 @@ class SuperAdminController extends Controller
     {
         $this->authorizeSuperAdmin($request);
 
+        $organization->load(['products.permissions', 'subscriptions.product']);
+
         $owners = $organization->users()
             ->with('roleModel')
             ->get()
             ->filter(fn (User $user): bool => $user->role_slug === 'owner')
             ->values();
 
-        return view('admin.super.organization-details', compact('organization', 'owners'));
+        $allProducts = Product::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get();
+
+        return view('admin.super.organization-details', compact('organization', 'owners', 'allProducts'));
     }
 
     public function organizationWidget(Request $request, Organization $organization): View

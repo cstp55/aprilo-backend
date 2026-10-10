@@ -63,4 +63,21 @@ class Product extends Model
     {
         return $this->hasMany(Subscription::class);
     }
+
+    public function permissions(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Permission::class, 'product_permissions');
+    }
+
+    public function organizations(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Organization::class, 'organization_products')
+            ->withPivot(['status', 'expires_at', 'metadata'])
+            ->withTimestamps();
+    }
+
+    public function hasPermission(string $slug): bool
+    {
+        return $this->permissions->contains('slug', $slug);
+    }
 }

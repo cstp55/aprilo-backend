@@ -121,9 +121,10 @@ class KnowledgeSourceController extends Controller
     private function authorizeAdmin(Request $request): void
     {
         abort_unless(
-            in_array($request->user()->role, [UserRole::Owner->value, UserRole::HrAdmin->value], true),
+            in_array($request->user()->role, [UserRole::Owner->value, UserRole::HrAdmin->value, 'agent', 'support_agent'], true)
+            || $request->user()->agentSupport()->exists(),
             403,
-            'Admin access is required.'
+            'Admin or Agent access is required.'
         );
     }
 

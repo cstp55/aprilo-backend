@@ -59,34 +59,86 @@ trait HasPermissions
             return true;
         }
 
-        // Organization owners are limited to products currently licensed by their tenant.
+        // 2. Organization Owner dynamically inherits permissions for licensed products
         if ($this->role_slug === 'owner') {
-            if (str_starts_with($permissionSlug, 'ecommerce.')) {
-                return $this->organization?->hasActiveProductCategory('ecommerce') ?? false;
-            }
-
-            if (str_starts_with($permissionSlug, 'employee.') || str_starts_with($permissionSlug, 'hr.')) {
-                return false;
-            }
-
-            if (str_starts_with($permissionSlug, 'billing.')) {
+            // Core management permissions granted to owners
+            if (str_starts_with($permissionSlug, 'billing.') ||
+                str_starts_with($permissionSlug, 'roles.') ||
+                str_starts_with($permissionSlug, 'users.')) {
                 return true;
             }
 
-            if (str_starts_with($permissionSlug, 'dashboard.')) {
-                return $this->organization?->hasActiveProductCategory('ai_support')
-                    || $this->organization?->hasActiveProductCategory('ecommerce');
+            if (! $this->organization) {
+                return false;
             }
 
-            return $this->organization?->hasActiveProductCategory('ai_support') ?? false;
+            // Check if any active product for this organization has this permission
+            $directProducts = $this->organization->products()
+                ->wherePivot('status', 'active')
+                ->where(function ($q) {
+                    $q->whereNull('organization_products.expires_at')
+                        ->orWhere('organization_products.expires_at', '>=', now());
+                })
+                ->with('permissions')
+                ->get();
+
+            foreach ($directProducts as $product) {
+                if ($product->hasPermission($permissionSlug)) {
+                    return true;
+                }
+            }
+
+            // Category fallbacks
+            if (str_starts_with($permissionSlug, 'ecommerce.')) {
+                return $this->organization->hasActiveProductCategory('ecommerce');
+            }
+            if (str_starts_with($permissionSlug, 'hr.') || str_starts_with($permissionSlug, 'employee.')) {
+                return $this->organization->hasActiveProductCategory('hr')
+                    || $this->organization->hasActiveProductCategory('aprilo-hr');
+            }
+            if (str_starts_with($permissionSlug, 'support.') || str_starts_with($permissionSlug, 'escalations.')) {
+                return $this->organization->hasActiveProductCategory('support_saas')
+                    || $this->organization->hasActiveProductCategory('ai_support')
+                    || $this->organization->hasActiveProductCategory('aprilo-support')
+                    || $this->organization->hasActiveProductCategory('aprilo-ai');
+            }
+            if (str_starts_with($permissionSlug, 'widget.') || str_starts_with($permissionSlug, 'live_chat.') || str_starts_with($permissionSlug, 'plugins.') || str_starts_with($permissionSlug, 'chatbot.')) {
+                return $this->organization->hasActiveProductCategory('ai_support')
+                    || $this->organization->hasActiveProductCategory('chatbot')
+                    || $this->organization->hasActiveProductCategory('aprilo-ai')
+                    || $this->organization->hasActiveProductCategory('aprilo-chatbot');
+            }
+            if (str_starts_with($permissionSlug, 'sales.') || str_starts_with($permissionSlug, 'whatsapp.')) {
+                return $this->organization->hasActiveProductCategory('sales_crm')
+                    || $this->organization->hasActiveProductCategory('aprilo-sales');
+            }
+            if (str_starts_with($permissionSlug, 'infra.')) {
+                return $this->organization->hasActiveProductCategory('infrastructure')
+                    || $this->organization->hasActiveProductCategory('aprilo-infrastructure');
+            }
+            if (str_starts_with($permissionSlug, 'banking.')) {
+                return $this->organization->hasActiveProductCategory('financial')
+                    || $this->organization->hasActiveProductCategory('aprilo-fintech');
+            }
+
+            if ($permissionSlug === 'dashboard.view' || $permissionSlug === 'analytics.view' || $permissionSlug === 'logs.view') {
+                return $this->organization->hasActiveProductCategory('ai_support')
+                    || $this->organization->hasActiveProductCategory('ecommerce')
+                    || $this->organization->hasActiveProductCategory('chatbot')
+                    || $this->organization->hasActiveProductCategory('support_saas')
+                    || $this->organization->hasActiveProductCategory('hr')
+                    || $this->organization->hasActiveProductCategory('sales_crm');
+            }
+
+            return false;
         }
 
-        // 2. Check assigned Role permissions
-        if ($this->roleModel) {
-            return $this->roleModel->hasPermission($permissionSlug);
+        // 3. For non-owners, check explicitly assigned Role permissions
+        if ($this->roleModel && $this->roleModel->hasPermission($permissionSlug)) {
+            return true;
         }
 
-        // 3. Fallback compatibility with legacy role strings if role_id not linked
+        // 4. Fallback compatibility with legacy role strings if role_id not linked
         $legacyRole = $this->attributes['role'] ?? 'employee';
 
         if ($legacyRole === 'hr_admin') {

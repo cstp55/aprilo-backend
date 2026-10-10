@@ -15,10 +15,8 @@ class NavigationService
         $menu = [];
         $owner = $user->role_slug === 'owner';
         $organization = $user->organization;
-        $hasAi = ! $owner || $organization?->hasActiveProductCategory('ai_support');
-        $hasEcommerce = ! $owner || $organization?->hasActiveProductCategory('ecommerce');
 
-        // 1. Super Admin Platform Group
+        // 1. Super Admin Platform Administration Group
         if ($user->isSuperAdmin()) {
             $menu[] = [
                 'header' => 'Platform Administration',
@@ -30,10 +28,22 @@ class NavigationService
                         'active' => request()->routeIs('admin.super.dashboard'),
                     ],
                     [
-                        'title' => 'All Organizations',
+                        'title' => 'Organizations',
                         'route' => 'admin.super.organizations',
                         'icon' => 'buildings',
                         'active' => request()->routeIs('admin.super.organizations*'),
+                    ],
+                    [
+                        'title' => 'Products & Permissions',
+                        'route' => 'admin.super.products',
+                        'icon' => 'layers',
+                        'active' => request()->routeIs('admin.super.products*'),
+                    ],
+                    [
+                        'title' => 'Roles & RBAC',
+                        'route' => 'admin.roles',
+                        'icon' => 'shield',
+                        'active' => request()->routeIs('admin.roles*'),
                     ],
                     [
                         'title' => 'Chat & Token Monitoring',
@@ -69,20 +79,24 @@ class NavigationService
             ];
         }
 
-        // 2. Dashboards Group (HR vs E-commerce vs General)
+        // 2. Overview / Dashboards Group
         $dashboardItems = [];
 
         if (! $user->isSuperAdmin()) {
+            $hasAi = ! $owner || ($organization?->hasActiveProductCategory('ai_support') ?? false) || ($organization?->hasActiveProductCategory('chatbot') ?? false);
+            $hasEcom = ! $owner || ($organization?->hasActiveProductCategory('ecommerce') ?? false);
+            $hasHr = ! $owner || ($organization?->hasActiveProductCategory('hr') ?? false) || ($organization?->hasActiveProductCategory('aprilo-hr') ?? false);
+
             if (! $owner && ($user->hasPermission('hr.dashboard.view') || $user->isHrAdmin())) {
                 $dashboardItems[] = [
                     'title' => 'HR Dashboard',
                     'route' => 'admin.dashboard',
                     'icon' => 'users',
-                    'active' => request()->routeIs('admin.dashboard'),
+                    'active' => request()->routeIs('admin.dashboard') && request('view') === 'hr',
                 ];
             }
 
-            if (($hasEcommerce && $user->hasPermission('ecommerce.dashboard.view')) || $user->isEcommerceAdmin()) {
+            if (($hasEcom && $user->hasPermission('ecommerce.dashboard.view')) || $user->isEcommerceAdmin()) {
                 $dashboardItems[] = [
                     'title' => 'E-commerce Dashboard',
                     'route' => 'admin.ecommerce.dashboard',
@@ -98,10 +112,24 @@ class NavigationService
                     'icon' => 'bot',
                     'active' => request()->routeIs('admin.dashboard'),
                 ];
+            } elseif ($owner && $hasHr && ! $hasAi) {
+                $dashboardItems[] = [
+                    'title' => 'HR Dashboard',
+                    'route' => 'admin.dashboard',
+                    'icon' => 'users',
+                    'active' => request()->routeIs('admin.dashboard'),
+                ];
+            } elseif (! $owner && $user->hasPermission('dashboard.view')) {
+                $dashboardItems[] = [
+                    'title' => 'Main Dashboard',
+                    'route' => 'admin.dashboard',
+                    'icon' => 'layout-dashboard',
+                    'active' => request()->routeIs('admin.dashboard') && ! request()->has('tab'),
+                ];
             }
         } else {
             $dashboardItems[] = [
-                'title' => 'Operations Dashboard',
+                'title' => 'Operations Console',
                 'route' => 'admin.dashboard',
                 'icon' => 'layout-dashboard',
                 'active' => request()->routeIs('admin.dashboard'),
@@ -115,10 +143,13 @@ class NavigationService
             ];
         }
 
-        // 3. Knowledge & AI Operations
+        // 3. AI & Knowledge (Aprilo AI & Chatbot)
         $aiItems = [];
 
-        if ($hasAi && $user->hasPermission('knowledge.sources.view')) {
+        // For owner, only show if they have an active AI/chatbot/support product (not ecommerce-only)
+        $canAccessAiKnowledge = ! $owner || ($organization?->hasActiveProductCategory('ai_support') || $organization?->hasActiveProductCategory('chatbot') || $organization?->hasActiveProductCategory('support_saas'));
+
+        if ($canAccessAiKnowledge && $user->hasPermission('knowledge.sources.view')) {
             $aiItems[] = [
                 'title' => 'Knowledge Sources',
                 'route' => 'admin.sources',
@@ -127,17 +158,16 @@ class NavigationService
             ];
         }
 
-        if ($hasAi && $user->hasPermission('widget.settings')) {
+        if ($canAccessAiKnowledge && $user->hasPermission('widget.settings')) {
             $aiItems[] = [
-                'title' => 'Widget AI & Restrictions',
-                'route' => 'admin.settings',
-                'params' => ['tab' => 'agent'],
+                'title' => 'Widget AI & Prompts',
+                'route' => 'admin.settings.agent',
                 'icon' => 'bot',
-                'active' => request()->routeIs('admin.settings') && request('tab', 'agent') === 'agent',
+                'active' => request()->routeIs('admin.settings.agent'),
             ];
         }
 
-        if ($hasAi && $user->hasPermission('live_chat.view')) {
+        if ($canAccessAiKnowledge && $user->hasPermission('live_chat.view')) {
             $aiItems[] = [
                 'title' => 'Live Agent Chat',
                 'route' => 'admin.chat',
@@ -146,13 +176,12 @@ class NavigationService
             ];
         }
 
-        if ($hasAi && $user->hasPermission('widget.script')) {
+        if ($canAccessAiKnowledge && $user->hasPermission('widget.script')) {
             $aiItems[] = [
                 'title' => 'Embed Script (WG)',
-                'route' => 'admin.settings',
-                'params' => ['tab' => 'script'],
+                'route' => 'admin.settings.deploy',
                 'icon' => 'code',
-                'active' => request()->routeIs('admin.settings') && request('tab') === 'script',
+                'active' => request()->routeIs('admin.settings.deploy'),
             ];
         }
 
@@ -163,11 +192,11 @@ class NavigationService
             ];
         }
 
-        // 4. Human Review & Auditing
-        $auditItems = [];
+        // 4. Support & Human Review
+        $supportItems = [];
 
-        if ($hasAi && $user->hasPermission('escalations.view')) {
-            $auditItems[] = [
+        if ($canAccessAiKnowledge && $user->hasPermission('escalations.view')) {
+            $supportItems[] = [
                 'title' => 'Escalations Queue',
                 'route' => 'admin.escalations',
                 'icon' => 'alert-triangle',
@@ -175,8 +204,8 @@ class NavigationService
             ];
         }
 
-        if ($hasAi && $user->hasPermission('logs.view')) {
-            $auditItems[] = [
+        if ($canAccessAiKnowledge && $user->hasPermission('logs.view')) {
+            $supportItems[] = [
                 'title' => 'Interaction Logs',
                 'route' => 'admin.logs',
                 'icon' => 'file-text',
@@ -184,8 +213,8 @@ class NavigationService
             ];
         }
 
-        if ($hasAi && ($owner || $user->hasPermission('logs.view'))) {
-            $auditItems[] = [
+        if ($canAccessAiKnowledge && ($owner || $user->hasPermission('analytics.view'))) {
+            $supportItems[] = [
                 'title' => 'Chat & Token Usage',
                 'route' => 'admin.monitoring',
                 'icon' => 'activity',
@@ -193,17 +222,18 @@ class NavigationService
             ];
         }
 
-        if (! empty($auditItems)) {
+        if (! empty($supportItems)) {
             $menu[] = [
                 'header' => 'Review & Auditing',
-                'items' => $auditItems,
+                'items' => $supportItems,
             ];
         }
 
         // 5. HR Operations
         $hrItems = [];
+        $canAccessHr = ! $owner || ($organization?->hasActiveProductCategory('hr') || $organization?->hasActiveProductCategory('aprilo-hr'));
 
-        if (! $owner && $user->hasPermission('employee.leaves.manage')) {
+        if ($canAccessHr && $user->hasPermission('employee.leaves.manage')) {
             $hrItems[] = [
                 'title' => 'Leave Requests',
                 'route' => 'admin.leaves',
@@ -212,7 +242,7 @@ class NavigationService
             ];
         }
 
-        if (! $owner && $user->hasPermission('employee.wfh.manage')) {
+        if ($canAccessHr && $user->hasPermission('employee.wfh.manage')) {
             $hrItems[] = [
                 'title' => 'WFH Requests',
                 'route' => 'admin.wfh',
@@ -221,7 +251,7 @@ class NavigationService
             ];
         }
 
-        if (! $owner && $user->hasPermission('employee.validate')) {
+        if ($canAccessHr && $user->hasPermission('employee.validate')) {
             $hrItems[] = [
                 'title' => 'Validate Employee',
                 'route' => 'admin.employees',
@@ -230,7 +260,7 @@ class NavigationService
             ];
         }
 
-        if (! $owner && $user->hasPermission('employee.idcards.manage')) {
+        if ($canAccessHr && $user->hasPermission('employee.idcards.manage')) {
             $hrItems[] = [
                 'title' => 'ID Cards',
                 'route' => 'admin.idcards',
@@ -246,10 +276,11 @@ class NavigationService
             ];
         }
 
-        // 6. E-commerce Hub
+        // 6. E-commerce Ops
         $ecomItems = [];
+        $canAccessEcom = ! $owner || ($organization?->hasActiveProductCategory('ecommerce'));
 
-        if ($hasEcommerce && $user->hasPermission('ecommerce.platforms.connect')) {
+        if ($canAccessEcom && $user->hasPermission('ecommerce.platforms.connect')) {
             $ecomItems[] = [
                 'title' => 'Store Connectors',
                 'route' => 'admin.ecommerce.platforms',
@@ -258,7 +289,7 @@ class NavigationService
             ];
         }
 
-        if ($hasEcommerce && $user->hasPermission('ecommerce.products.sync')) {
+        if ($canAccessEcom && $user->hasPermission('ecommerce.products.sync')) {
             $ecomItems[] = [
                 'title' => 'Product Catalog & Sync',
                 'route' => 'admin.ecommerce.products',
@@ -267,7 +298,7 @@ class NavigationService
             ];
         }
 
-        if ($hasEcommerce && $user->hasPermission('ecommerce.orders.sync')) {
+        if ($canAccessEcom && $user->hasPermission('ecommerce.orders.sync')) {
             $ecomItems[] = [
                 'title' => 'Orders Sync',
                 'route' => 'admin.ecommerce.orders',
@@ -276,7 +307,7 @@ class NavigationService
             ];
         }
 
-        if ($hasEcommerce && $user->hasPermission('ecommerce.licenses.manage')) {
+        if ($canAccessEcom && $user->hasPermission('ecommerce.licenses.manage')) {
             $ecomItems[] = [
                 'title' => 'Plugin License Keys',
                 'route' => 'admin.ecommerce.licenses',
@@ -292,10 +323,10 @@ class NavigationService
             ];
         }
 
-        // 7. Organization Administration & RBAC
+        // 7. Administration & Settings
         $adminItems = [];
 
-        if ((! $owner || $hasAi) && $user->hasPermission('roles.manage')) {
+        if ((! $owner || $canAccessAiKnowledge) && $user->hasPermission('roles.manage')) {
             $adminItems[] = [
                 'title' => 'Roles & Permissions',
                 'route' => 'admin.roles',
@@ -304,23 +335,21 @@ class NavigationService
             ];
         }
 
-        if ($hasAi && $user->hasPermission('plugins.connect')) {
+        if ($canAccessAiKnowledge && $user->hasPermission('plugins.connect')) {
             $adminItems[] = [
                 'title' => 'Channel Connectors',
-                'route' => 'admin.settings',
-                'params' => ['tab' => 'connect'],
+                'route' => 'admin.settings.connect',
                 'icon' => 'cpu',
-                'active' => request()->routeIs('admin.settings') && request('tab') === 'connect',
+                'active' => request()->routeIs('admin.settings.connect*'),
             ];
         }
 
         if ($user->hasPermission('billing.view')) {
             $adminItems[] = [
                 'title' => 'Billing & Plans',
-                'route' => 'admin.settings',
-                'params' => ['tab' => 'pricing'],
+                'route' => 'admin.settings.pricing',
                 'icon' => 'dollar-sign',
-                'active' => request()->routeIs('admin.settings') && request('tab') === 'pricing',
+                'active' => request()->routeIs('admin.settings.pricing'),
             ];
         }
 
