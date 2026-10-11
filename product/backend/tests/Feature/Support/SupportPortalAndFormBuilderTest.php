@@ -552,4 +552,60 @@ class SupportPortalAndFormBuilderTest extends TestCase
 
         $response->assertStatus(403);
     }
+
+    public function test_admin_can_view_ticket_reports_and_monitor_dashboard(): void
+    {
+        // Seed tickets
+        SupportTicket::create([
+            'organization_id' => $this->organization->id,
+            'ticket_number' => 'TIC-101',
+            'subject' => 'Server Connectivity Issue',
+            'description' => 'Cannot connect to production database',
+            'channel' => 'portal',
+            'priority' => 'urgent',
+            'status' => 'open',
+        ]);
+
+        SupportTicket::create([
+            'organization_id' => $this->organization->id,
+            'ticket_number' => 'TIC-102',
+            'subject' => 'Billing inquiry regarding invoice',
+            'description' => 'Need updated receipt for tax filing',
+            'channel' => 'email',
+            'priority' => 'normal',
+            'status' => 'resolved',
+            'resolved_at' => now(),
+        ]);
+
+        $response = $this->actingAs($this->orgAdmin)
+            ->get(route('admin.support.reports'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Support Ticket Reports &amp; Monitor', false);
+        $response->assertSee('Tickets Created');
+        $response->assertSee('Resolved Tickets');
+        $response->assertSee('Active Open Queue');
+        $response->assertSee('Live Ticket Queue Monitor');
+        $response->assertSee('TIC-101');
+        $response->assertSee('TIC-102');
+    }
+
+    public function test_ticket_reports_exports_csv_properly(): void
+    {
+        SupportTicket::create([
+            'organization_id' => $this->organization->id,
+            'ticket_number' => 'TIC-CSV-1',
+            'subject' => 'CSV Export Verification Test',
+            'description' => 'Verifying ticket CSV exporter',
+            'channel' => 'portal',
+            'priority' => 'high',
+            'status' => 'new',
+        ]);
+
+        $response = $this->actingAs($this->orgAdmin)
+            ->get(route('admin.support.reports', ['export' => 'csv']));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+    }
 }

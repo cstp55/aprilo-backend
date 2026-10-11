@@ -20,7 +20,10 @@
                 @endif
             </p>
         </div>
-        <div style="display: flex; gap: 10px; align-items: center;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <a href="{{ route('admin.support.reports', $organization ? ['organization_id' => $organization->id] : []) }}" class="button" style="background: #fff; color: var(--ink); border: 1px solid var(--line); box-shadow: none; display: inline-flex; align-items: center; gap: 6px;">
+                <span>📊</span> Ticket Monitor & Reports
+            </a>
             @if ($organization && $portalSettings)
                 <a href="{{ route('admin.support.forms', $isSuperAdmin ? ['organization_id' => $organization->id] : []) }}" class="button" style="background: #fff; color: var(--ink); border: 1px solid var(--line); box-shadow: none; display: inline-flex; align-items: center; gap: 6px;">
                     <span>📋</span> Manage Ticket Forms

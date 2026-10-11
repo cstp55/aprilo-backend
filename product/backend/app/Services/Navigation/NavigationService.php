@@ -340,6 +340,15 @@ class NavigationService
         if ($canAccessSupport) {
             $supportNavItems = [];
 
+            if ($user->isSuperAdmin() || $owner || $user->hasPermission('support.dashboard.view') || $user->hasPermission('support.tickets.view') || $user->hasPermission('support.settings.manage')) {
+                $supportNavItems[] = [
+                    'title' => 'Ticket Monitor & Reports',
+                    'route' => 'admin.support.reports',
+                    'icon' => 'activity',
+                    'active' => request()->routeIs('admin.support.reports*') || request()->routeIs('admin.support.monitor*'),
+                ];
+            }
+
             if ($user->isSuperAdmin() || $owner || $user->hasPermission('support.settings.manage') || $user->hasPermission('support.sla.manage') || $user->hasPermission('support.dashboard.view')) {
                 $supportNavItems[] = [
                     'title' => 'Portal & SLA Settings',

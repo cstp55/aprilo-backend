@@ -6,14 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Support\SupportPortalSetting;
 use App\Models\Support\SupportSlaPolicy;
+use App\Models\Support\SupportTicket;
 use App\Models\Support\SupportTicketCategory;
 use App\Models\Support\SupportTicketForm;
 use App\Models\Support\SupportTicketFormVersion;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SupportAdminController extends Controller
 {
@@ -514,6 +517,300 @@ class SupportAdminController extends Controller
             'organization' => $organization,
             'form' => $form,
             'portalSettings' => $portalSettings,
+        ]);
+    }
+
+    /**
+     * View Support Ticket Reports & Live Queue Monitor.
+     */
+    public function ticketReports(Request $request): View|StreamedResponse
+    {
+        $user = $request->user();
+        abort_unless($user, 401);
+
+        $isAuthorized = $user->isSuperAdmin()
+            || $user->role_slug === 'owner'
+            || $user->hasPermission('support.dashboard.view')
+            || $user->hasPermission('support.tickets.view')
+            || $user->hasPermission('support.settings.manage')
+            || $user->hasPermission('dashboard.view');
+
+        abort_unless($isAuthorized, 403, 'Unauthorized. Support administrator privileges required.');
+
+        $isSuperAdmin = $user->isSuperAdmin();
+
+        if ($isSuperAdmin) {
+            $organizations = Organization::orderBy('name')->get(['id', 'name']);
+        } else {
+            $organizations = $user->organization ? collect([$user->organization]) : collect();
+        }
+
+        $orgId = $request->input('organization_id', $request->query('organization_id'));
+        $organization = null;
+
+        if ($isSuperAdmin) {
+            if ($orgId) {
+                $organization = Organization::find($orgId);
+            }
+        } else {
+            if ($orgId) {
+                abort_unless($user->organization_id === $orgId, 403, 'Unauthorized access to another organization.');
+                $organization = $user->organization;
+            } else {
+                $organization = $user->organization;
+            }
+        }
+
+        // Date range filter
+        $range = $request->query('range', '30d');
+        $rangeStart = match ($range) {
+            'today' => now()->startOfDay(),
+            '7d' => now()->subDays(7)->startOfDay(),
+            '30d' => now()->subDays(30)->startOfDay(),
+            '90d' => now()->subDays(90)->startOfDay(),
+            default => null, // 'all'
+        };
+
+        $baseQuery = SupportTicket::query();
+        if ($organization) {
+            $baseQuery->where('organization_id', $organization->id);
+        }
+
+        // Core volume counts
+        $totalTickets = (clone $baseQuery)->count();
+        $createdInPeriod = $rangeStart ? (clone $baseQuery)->where('created_at', '>=', $rangeStart)->count() : $totalTickets;
+
+        $resolvedQuery = (clone $baseQuery)->whereIn('status', ['resolved', 'closed']);
+        $totalResolved = (clone $resolvedQuery)->count();
+        $resolvedInPeriod = $rangeStart ? (clone $resolvedQuery)->where(function ($q) use ($rangeStart) {
+            $q->where('resolved_at', '>=', $rangeStart)
+              ->orWhere(function ($sq) use ($rangeStart) {
+                  $sq->whereNull('resolved_at')->where('updated_at', '>=', $rangeStart);
+              });
+        })->count() : $totalResolved;
+
+        $resolutionRate = $totalTickets > 0 ? round(($totalResolved / $totalTickets) * 100, 1) : 0;
+
+        $openTickets = (clone $baseQuery)->whereIn('status', ['new', 'open', 'in_progress'])->count();
+        $pendingTickets = (clone $baseQuery)->whereIn('status', ['pending_customer', 'pending_internal'])->count();
+        $urgentTickets = (clone $baseQuery)->where('priority', 'urgent')->whereNotIn('status', ['resolved', 'closed'])->count();
+        $highTickets = (clone $baseQuery)->where('priority', 'high')->whereNotIn('status', ['resolved', 'closed'])->count();
+
+        // SLA Performance metrics
+        $slaBreached = (clone $baseQuery)->whereNotIn('status', ['resolved', 'closed'])
+            ->whereNotNull('sla_due_at')
+            ->where('sla_due_at', '<', now())
+            ->count();
+
+        $slaTickets = (clone $baseQuery)->whereNotNull('sla_due_at')->get(['resolved_at', 'sla_due_at', 'created_at', 'first_response_at']);
+        $slaMet = 0;
+        $slaTotal = 0;
+        $totalResponseMin = 0;
+        $responseCount = 0;
+        $totalResolutionMin = 0;
+        $resolutionCount = 0;
+
+        foreach ($slaTickets as $t) {
+            if ($t->resolved_at) {
+                $slaTotal++;
+                if ($t->resolved_at <= $t->sla_due_at) {
+                    $slaMet++;
+                }
+                if ($t->created_at) {
+                    $totalResolutionMin += $t->created_at->diffInMinutes($t->resolved_at);
+                    $resolutionCount++;
+                }
+            }
+            if ($t->first_response_at && $t->created_at) {
+                $totalResponseMin += $t->created_at->diffInMinutes($t->first_response_at);
+                $responseCount++;
+            }
+        }
+
+        $slaComplianceRate = $slaTotal > 0 ? round(($slaMet / $slaTotal) * 100, 1) : 100;
+        $avgFirstResponseHours = $responseCount > 0 ? round(($totalResponseMin / $responseCount) / 60, 1) : 0;
+        $avgResolutionHours = $resolutionCount > 0 ? round(($totalResolutionMin / $resolutionCount) / 60, 1) : 0;
+
+        // Status Counts
+        $statusCounts = [
+            'new' => (clone $baseQuery)->where('status', 'new')->count(),
+            'open' => (clone $baseQuery)->where('status', 'open')->count(),
+            'in_progress' => (clone $baseQuery)->where('status', 'in_progress')->count(),
+            'pending_customer' => (clone $baseQuery)->where('status', 'pending_customer')->count(),
+            'pending_internal' => (clone $baseQuery)->where('status', 'pending_internal')->count(),
+            'resolved' => (clone $baseQuery)->where('status', 'resolved')->count(),
+            'closed' => (clone $baseQuery)->where('status', 'closed')->count(),
+        ];
+
+        // Priority Counts
+        $priorityCounts = [
+            'urgent' => (clone $baseQuery)->where('priority', 'urgent')->count(),
+            'high' => (clone $baseQuery)->where('priority', 'high')->count(),
+            'normal' => (clone $baseQuery)->where('priority', 'normal')->count(),
+            'low' => (clone $baseQuery)->where('priority', 'low')->count(),
+        ];
+
+        // Channel Counts
+        $channelCounts = [
+            'portal' => (clone $baseQuery)->where('channel', 'portal')->count(),
+            'website' => (clone $baseQuery)->where('channel', 'website')->count(),
+            'email' => (clone $baseQuery)->where('channel', 'email')->count(),
+            'whatsapp' => (clone $baseQuery)->where('channel', 'whatsapp')->count(),
+        ];
+
+        // Category breakdown
+        $categories = SupportTicketCategory::where(function ($q) use ($organization) {
+            if ($organization) {
+                $q->where('organization_id', $organization->id);
+            }
+        })->get();
+
+        $categoryStats = $categories->map(function ($cat) use ($baseQuery) {
+            $catTotal = (clone $baseQuery)->where('category_id', $cat->id)->count();
+            $catResolved = (clone $baseQuery)->where('category_id', $cat->id)->whereIn('status', ['resolved', 'closed'])->count();
+            return [
+                'name' => $cat->name,
+                'department' => $cat->department ?? 'General',
+                'total' => $catTotal,
+                'resolved' => $catResolved,
+                'rate' => $catTotal > 0 ? round(($catResolved / $catTotal) * 100, 1) : 0,
+            ];
+        })->sortByDesc('total')->values();
+
+        // Agent workload
+        $agentIds = (clone $baseQuery)->whereNotNull('assigned_to')->distinct()->pluck('assigned_to');
+        $agents = User::whereIn('id', $agentIds)->get();
+        $agentStats = $agents->map(function ($agent) use ($baseQuery) {
+            $assigned = (clone $baseQuery)->where('assigned_to', $agent->id)->count();
+            $resolved = (clone $baseQuery)->where('assigned_to', $agent->id)->whereIn('status', ['resolved', 'closed'])->count();
+            $open = (clone $baseQuery)->where('assigned_to', $agent->id)->whereNotIn('status', ['resolved', 'closed'])->count();
+            return [
+                'id' => $agent->id,
+                'name' => $agent->name,
+                'email' => $agent->email,
+                'assigned' => $assigned,
+                'open' => $open,
+                'resolved' => $resolved,
+                'rate' => $assigned > 0 ? round(($resolved / $assigned) * 100, 1) : 0,
+            ];
+        })->sortByDesc('assigned')->values();
+
+        // 7-day daily trend (created vs resolved)
+        $dailyTrend = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $dayStart = now()->subDays($i)->startOfDay();
+            $dayEnd = now()->subDays($i)->endOfDay();
+
+            $created = (clone $baseQuery)->whereBetween('created_at', [$dayStart, $dayEnd])->count();
+            $resolved = (clone $baseQuery)->whereIn('status', ['resolved', 'closed'])
+                ->where(function ($q) use ($dayStart, $dayEnd) {
+                    $q->whereBetween('resolved_at', [$dayStart, $dayEnd])
+                      ->orWhere(function ($sq) use ($dayStart, $dayEnd) {
+                          $sq->whereNull('resolved_at')->whereBetween('updated_at', [$dayStart, $dayEnd]);
+                      });
+                })->count();
+
+            $dailyTrend[] = [
+                'date' => now()->subDays($i)->format('M d'),
+                'day' => now()->subDays($i)->format('D'),
+                'created' => $created,
+                'resolved' => $resolved,
+            ];
+        }
+
+        // Live monitor query with filters
+        $monitorQuery = (clone $baseQuery)
+            ->with(['customer', 'category', 'assignedAgent', 'organization'])
+            ->orderByDesc('created_at');
+
+        $statusFilter = $request->query('status_filter');
+        if ($statusFilter) {
+            if ($statusFilter === 'open') {
+                $monitorQuery->whereNotIn('status', ['resolved', 'closed']);
+            } elseif ($statusFilter === 'urgent') {
+                $monitorQuery->where('priority', 'urgent')->whereNotIn('status', ['resolved', 'closed']);
+            } elseif ($statusFilter === 'unassigned') {
+                $monitorQuery->whereNull('assigned_to')->whereNotIn('status', ['resolved', 'closed']);
+            } elseif ($statusFilter === 'resolved') {
+                $monitorQuery->whereIn('status', ['resolved', 'closed']);
+            } else {
+                $monitorQuery->where('status', $statusFilter);
+            }
+        }
+
+        if ($request->filled('search')) {
+            $search = trim($request->query('search'));
+            $monitorQuery->where(function ($q) use ($search) {
+                $q->where('ticket_number', 'like', "%{$search}%")
+                  ->orWhere('subject', 'like', "%{$search}%")
+                  ->orWhere('department', 'like', "%{$search}%")
+                  ->orWhereHas('customer', function ($cq) use ($search) {
+                      $cq->where('name', 'like', "%{$search}%")
+                         ->orWhere('email', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        // Handle CSV Export
+        if ($request->query('export') === 'csv') {
+            $ticketsToExport = $monitorQuery->limit(1000)->get();
+            $headers = [
+                'Content-Type' => 'text/csv',
+                'Content-Disposition' => 'attachment; filename="support-tickets-report-' . now()->format('Y-m-d') . '.csv"',
+            ];
+
+            return response()->stream(function () use ($ticketsToExport) {
+                $handle = fopen('php://output', 'w');
+                fputcsv($handle, ['Ticket Number', 'Organization', 'Subject', 'Customer', 'Channel', 'Department', 'Priority', 'Status', 'Assigned To', 'Created At', 'Resolved At', 'SLA Due At']);
+                foreach ($ticketsToExport as $ticket) {
+                    fputcsv($handle, [
+                        $ticket->ticket_number,
+                        $ticket->organization?->name ?? 'N/A',
+                        $ticket->subject,
+                        $ticket->customer?->name ?? 'Anonymous',
+                        $ticket->channel,
+                        $ticket->department ?? 'General',
+                        ucfirst($ticket->priority),
+                        ucfirst(str_replace('_', ' ', $ticket->status)),
+                        $ticket->assignedAgent?->name ?? 'Unassigned',
+                        $ticket->created_at?->format('Y-m-d H:i:s'),
+                        $ticket->resolved_at?->format('Y-m-d H:i:s'),
+                        $ticket->sla_due_at?->format('Y-m-d H:i:s'),
+                    ]);
+                }
+                fclose($handle);
+            }, 200, $headers);
+        }
+
+        $tickets = $monitorQuery->paginate(15)->withQueryString();
+
+        return view('admin.support.reports', [
+            'organization' => $organization,
+            'organizations' => $organizations,
+            'isSuperAdmin' => $isSuperAdmin,
+            'range' => $range,
+            'statusFilter' => $statusFilter,
+            'search' => $request->query('search', ''),
+            'totalTickets' => $totalTickets,
+            'createdInPeriod' => $createdInPeriod,
+            'totalResolved' => $totalResolved,
+            'resolvedInPeriod' => $resolvedInPeriod,
+            'resolutionRate' => $resolutionRate,
+            'openTickets' => $openTickets,
+            'pendingTickets' => $pendingTickets,
+            'urgentTickets' => $urgentTickets,
+            'highTickets' => $highTickets,
+            'slaBreached' => $slaBreached,
+            'slaComplianceRate' => $slaComplianceRate,
+            'avgFirstResponseHours' => $avgFirstResponseHours,
+            'avgResolutionHours' => $avgResolutionHours,
+            'statusCounts' => $statusCounts,
+            'priorityCounts' => $priorityCounts,
+            'channelCounts' => $channelCounts,
+            'categoryStats' => $categoryStats,
+            'agentStats' => $agentStats,
+            'dailyTrend' => $dailyTrend,
+            'tickets' => $tickets,
         ]);
     }
 }

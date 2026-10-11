@@ -128,6 +128,8 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         
         // Aprilo Support Desk Settings & Forms Builder
         Route::prefix('support')->name('support.')->group(function (): void {
+            Route::get('/reports', [SupportAdminController::class, 'ticketReports'])->name('reports');
+            Route::get('/monitor', [SupportAdminController::class, 'ticketReports'])->name('monitor');
             Route::get('/settings', [SupportAdminController::class, 'settings'])->name('settings');
             Route::post('/settings/portal', [SupportAdminController::class, 'updatePortalSettings'])->name('portal.update');
             Route::post('/settings/category', [SupportAdminController::class, 'storeCategory'])->name('categories.store');
