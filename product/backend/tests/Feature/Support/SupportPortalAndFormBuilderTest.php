@@ -480,4 +480,76 @@ class SupportPortalAndFormBuilderTest extends TestCase
 
         $pubResponse->assertStatus(403);
     }
+
+    public function test_super_admin_sees_all_organizations_in_select_field_and_prompts_to_select(): void
+    {
+        $orgB = Organization::create([
+            'name' => 'Beta Global Industries',
+            'slug' => 'beta-global',
+            'email' => 'admin@betaglobal.com',
+            'is_active' => true,
+        ]);
+
+        // Super admin visits without organization_id
+        $response = $this->actingAs($this->superAdmin)
+            ->get(route('admin.support.settings'));
+
+        $response->assertStatus(200);
+        $response->assertSee('Please Select an Organization');
+        $response->assertSee('Select Organization');
+        // Super admin sees all organizations in the select field
+        $response->assertSee($this->organization->name);
+        $response->assertSee($orgB->name);
+    }
+
+    public function test_super_admin_can_switch_organization_and_view_settings(): void
+    {
+        $orgB = Organization::create([
+            'name' => 'Beta Global Industries',
+            'slug' => 'beta-global',
+            'email' => 'admin@betaglobal.com',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->superAdmin)
+            ->get(route('admin.support.settings', ['organization_id' => $orgB->id]));
+
+        $response->assertStatus(200);
+        $response->assertSee('Active Organization: Beta Global Industries');
+        $response->assertSee('Beta Global Industries Support Center');
+        $response->assertDontSee('Please Select an Organization');
+    }
+
+    public function test_owner_can_see_only_their_organization_in_select_field(): void
+    {
+        $otherOrg = Organization::create([
+            'name' => 'Secret Enterprise LLC',
+            'slug' => 'secret-enterprise',
+            'email' => 'admin@secret.com',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->orgAdmin)
+            ->get(route('admin.support.settings'));
+
+        $response->assertStatus(200);
+        // Owner sees only their own organization in the select field
+        $response->assertSee($this->organization->name);
+        $response->assertDontSee('Secret Enterprise LLC');
+    }
+
+    public function test_owner_cannot_access_other_organization_support_settings(): void
+    {
+        $otherOrg = Organization::create([
+            'name' => 'Restricted Org Inc',
+            'slug' => 'restricted-org',
+            'email' => 'admin@restricted.com',
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->orgAdmin)
+            ->get(route('admin.support.settings', ['organization_id' => $otherOrg->id]));
+
+        $response->assertStatus(403);
+    }
 }

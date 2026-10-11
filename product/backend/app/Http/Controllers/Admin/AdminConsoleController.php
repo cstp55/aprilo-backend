@@ -1042,8 +1042,22 @@ class AdminConsoleController extends Controller
 
     public function updateSupportSettings(Request $request): RedirectResponse
     {
-        $organization = $request->user()->organization;
+        $user = $request->user();
+        abort_unless($user, 401);
         $this->authorizeAdmin($request);
+
+        $orgId = $request->input('organization_id', $request->query('organization_id'));
+
+        if ($user->isSuperAdmin()) {
+            $organization = $orgId ? \App\Models\Organization::find($orgId) : $user->organization;
+        } else {
+            if ($orgId) {
+                abort_unless($user->organization_id === $orgId, 403, 'Unauthorized access to another organization.');
+            }
+            $organization = $user->organization;
+        }
+
+        abort_unless($organization, 403, 'An active organization is required.');
 
         $validated = $request->validate([
             'urgent_response_time' => ['required', 'integer', 'min:5'],
@@ -1075,7 +1089,8 @@ class AdminConsoleController extends Controller
             );
         }
 
-        return redirect()->route('admin.support.settings')->with('status', 'Aprilo Support SLA policies successfully updated.');
+        return redirect()->route('admin.support.settings', $user->isSuperAdmin() ? ['organization_id' => $organization->id] : [])
+            ->with('status', 'Aprilo Support SLA policies successfully updated.');
     }
 
     private function authorizeAdmin(Request $request): void

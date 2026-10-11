@@ -131,6 +131,18 @@ Route::middleware('auth:sanctum')->group(function (): void {
 });
 
 // Public Support Portal Form Intake & Fetch
+// Public Support Portal API (Customer Intake & Ticket Tracking)
+Route::prefix('public/support')->group(function (): void {
+    Route::get('/portals/{slug}', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'portal'])->middleware('throttle:120,1');
+    Route::get('/portals/{slug}/forms/{ref}', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'form'])->middleware('throttle:120,1');
+    Route::post('/portals/{slug}/forms/{ref}/submit', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'submit'])->middleware('throttle:60,1');
+    Route::post('/portals/{slug}/uploads', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'upload'])->middleware('throttle:30,1');
+    Route::post('/portals/{slug}/tracking/request-code', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'requestCode'])->middleware('throttle:10,1');
+    Route::post('/portals/{slug}/tracking/verify', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'verify'])->middleware('throttle:20,1');
+    Route::get('/portals/{slug}/tracking/tickets/{ticketNumber}', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'trackedTicket'])->middleware('throttle:120,1');
+    Route::post('/portals/{slug}/tracking/tickets/{ticketNumber}/replies', [\App\Http\Controllers\Api\Support\PublicSupportPortalController::class, 'reply'])->middleware('throttle:30,1');
+});
+
 Route::prefix('support/public')->group(function (): void {
     Route::get('/forms/{form}', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'show'])->middleware('throttle:120,1');
     Route::post('/forms/{form}/submit', [\App\Http\Controllers\Api\Support\SupportFormController::class, 'submit'])->middleware('throttle:60,1');

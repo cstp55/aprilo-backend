@@ -35,11 +35,20 @@ class SupportAdminController extends Controller
 
         abort_unless($isAuthorized, 403, 'Unauthorized. Support administrator privileges required.');
 
-        // For Super Admin, allow optional organization switching via query param
-        if ($user->isSuperAdmin() && $request->filled('organization_id')) {
-            $org = Organization::find($request->query('organization_id'));
-            if ($org) {
-                return $org;
+        $orgId = $request->input('organization_id', $request->query('organization_id'));
+
+        // For Super Admin, allow organization switching via input or query param
+        if ($user->isSuperAdmin()) {
+            if ($orgId) {
+                $org = Organization::find($orgId);
+                if ($org) {
+                    return $org;
+                }
+            }
+        } else {
+            // For Owner or non-super admin, enforce organization boundary
+            if ($orgId) {
+                abort_unless($user->organization_id === $orgId, 403, 'Unauthorized access to another organization.');
             }
         }
 
@@ -53,35 +62,81 @@ class SupportAdminController extends Controller
      */
     public function settings(Request $request): View
     {
-        $organization = $this->authorizeSupportAdmin($request);
+        $user = $request->user();
+        abort_unless($user, 401);
 
-        $portalSettings = SupportPortalSetting::firstOrCreate(
-            ['organization_id' => $organization->id],
-            [
-                'portal_title' => $organization->name . ' Support Center',
-                'portal_subheading' => 'Submit a support ticket or track your requests',
-                'portal_slug' => Str::slug($organization->name ?: 'support') . '-' . substr($organization->id, 0, 4),
-                'support_email' => $organization->email,
-                'primary_color' => '#22C55E',
-                'secondary_color' => '#0F172A',
-                'allow_anonymous_tickets' => true,
-                'require_email_verification' => false,
-                'enable_customer_portal_auth' => true,
-                'is_portal_active' => true,
-            ]
-        );
+        $isAuthorized = $user->isSuperAdmin()
+            || $user->role_slug === 'owner'
+            || $user->hasPermission('support.settings.manage')
+            || $user->hasPermission('support.forms.manage')
+            || $user->hasPermission('support.sla.manage')
+            || $user->hasPermission('support.dashboard.view')
+            || $user->hasPermission('dashboard.view');
 
-        $categories = SupportTicketCategory::where('organization_id', $organization->id)->orderBy('name')->get();
-        $forms = SupportTicketForm::where('organization_id', $organization->id)->orderBy('name')->get();
-        $slaPolicies = SupportSlaPolicy::where('organization_id', $organization->id)->get()->keyBy('priority');
+        abort_unless($isAuthorized, 403, 'Unauthorized. Support administrator privileges required.');
+
+        $isSuperAdmin = $user->isSuperAdmin();
+
+        // Super Admin sees all organizations in the select field; Owner sees only their own organization
+        if ($isSuperAdmin) {
+            $organizations = Organization::orderBy('name')->get(['id', 'name']);
+        } else {
+            $organizations = $user->organization ? collect([$user->organization]) : collect();
+        }
+
+        $organization = null;
+        $orgId = $request->input('organization_id', $request->query('organization_id'));
+
+        if ($isSuperAdmin) {
+            if ($orgId) {
+                $organization = Organization::find($orgId);
+            }
+        } else {
+            if ($orgId) {
+                abort_unless($user->organization_id === $orgId, 403, 'Unauthorized access to another organization.');
+                $organization = $user->organization;
+            } elseif (! $request->has('organization_id')) {
+                // Default to owner's organization if not explicitly unselected
+                $organization = $user->organization;
+            }
+        }
+
+        $portalSettings = null;
+        $categories = collect();
+        $forms = collect();
+        $slaPolicies = collect();
+
+        if ($organization) {
+            $portalSettings = SupportPortalSetting::firstOrCreate(
+                ['organization_id' => $organization->id],
+                [
+                    'portal_title' => $organization->name . ' Support Center',
+                    'portal_subheading' => 'Submit a support ticket or track your requests',
+                    'portal_slug' => Str::slug($organization->name ?: 'support') . '-' . substr($organization->id, 0, 4),
+                    'support_email' => $organization->email,
+                    'primary_color' => '#22C55E',
+                    'secondary_color' => '#0F172A',
+                    'allow_anonymous_tickets' => true,
+                    'require_email_verification' => false,
+                    'enable_customer_portal_auth' => true,
+                    'is_portal_active' => true,
+                ]
+            );
+
+            $categories = SupportTicketCategory::where('organization_id', $organization->id)->orderBy('name')->get();
+            $forms = SupportTicketForm::where('organization_id', $organization->id)->orderBy('name')->get();
+            $slaPolicies = SupportSlaPolicy::where('organization_id', $organization->id)->get()->keyBy('priority');
+        }
 
         return view('admin.support.settings', [
             'organization' => $organization,
+            'organizations' => $organizations,
+            'isSuperAdmin' => $isSuperAdmin,
             'portalSettings' => $portalSettings,
             'categories' => $categories,
             'forms' => $forms,
             'slaPolicies' => $slaPolicies,
-            'settings' => $organization->settings,
+            'settings' => $organization?->settings,
         ]);
     }
 
@@ -134,7 +189,7 @@ class SupportAdminController extends Controller
             'is_portal_active' => $request->boolean('is_portal_active', true),
         ]);
 
-        return redirect()->route('admin.support.settings')
+        return redirect()->route('admin.support.settings', $request->user()->isSuperAdmin() ? ['organization_id' => $organization->id] : [])
             ->with('status', 'Support Portal settings and branding successfully saved.');
     }
 
@@ -180,7 +235,7 @@ class SupportAdminController extends Controller
             $msg = 'Support category created successfully.';
         }
 
-        return redirect()->route('admin.support.settings')->with('status', $msg);
+        return redirect()->route('admin.support.settings', $request->user()->isSuperAdmin() ? ['organization_id' => $organization->id] : [])->with('status', $msg);
     }
 
     /**
@@ -193,7 +248,7 @@ class SupportAdminController extends Controller
 
         $category->delete();
 
-        return redirect()->route('admin.support.settings')->with('status', 'Category deleted successfully.');
+        return redirect()->route('admin.support.settings', $request->user()->isSuperAdmin() ? ['organization_id' => $organization->id] : [])->with('status', 'Category deleted successfully.');
     }
 
     /**
