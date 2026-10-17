@@ -138,6 +138,12 @@ class Organization extends Model
             return true;
         }
 
+        if ($category === 'ai_support' || $category === 'chatbot') {
+            if ($this->settings?->is_widget_enabled ?? false) {
+                return true;
+            }
+        }
+
         if ($category === 'ecommerce') {
             if ($this->ecommerceLicenses()
                 ->where('status', 'active')

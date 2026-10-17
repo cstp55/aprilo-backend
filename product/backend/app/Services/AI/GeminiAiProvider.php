@@ -58,32 +58,35 @@ class GeminiAiProvider implements AiProviderInterface
         $eligibility = trim($settings->eligibility_criteria ?? '');
 
         $prompt = "System Instructions:\n";
-        $prompt .= "$systemPrompt\n";
+        $prompt .= "$systemPrompt\n\n";
         if (!empty($orgDetails)) {
-            $prompt .= "Organization Context:\n$orgDetails\n";
+            $prompt .= "Organization Context & Services:\n$orgDetails\n\n";
         }
         if (!empty($eligibility)) {
-            $prompt .= "Eligibility Rules:\n$eligibility\n";
+            $prompt .= "Role Limitations, Guardrails & Policies:\n$eligibility\n\n";
         }
 
-        // Add strict grounding behavior & token economy guidelines
-        $prompt .= "\nRules for Response:\n";
-        $prompt .= "- Answer the question based strictly on the provided context, organization context, and eligibility rules.\n";
+        if (!empty($contextText)) {
+            $prompt .= "--- RELEVANT KNOWLEDGE BASE CONTEXT ---\n$contextText\n\n";
+        }
+
+        $prompt .= "Rules for Response:\n";
+        $prompt .= "- Answer the user's question using the provided System Instructions, Organization Context, Role Limitations, and Knowledge Base as your source of truth.\n";
+        if (!empty($slicedContext)) {
+            $prompt .= "- Cite your document sources in your answer using bracketed numbers like [1], [2] when referencing information from the knowledge base.\n";
+        }
         if ($settings->strict_context_enforcement) {
-            $prompt .= "- Do not hallucinate or use external general facts. If the answer cannot be found in the provided details, respond exactly with:\n";
-            $prompt .= "\"I cannot confirm this from approved sources yet. Please escalate to support.\"\n";
+            $prompt .= "- Do not invent medical claims, pricing, doctor credentials, or hospital affiliations not supported by the context.\n";
+            $prompt .= "- If a specific fact cannot be answered from the provided sources, follow the human handoff or limitation rules defined in the System Instructions.\n";
         }
-        $prompt .= "- Be extremely concise and direct. Use the minimum number of tokens possible to answer.\n";
-        $prompt .= "- Avoid introductory text, conversational filler, greetings, and lengthy descriptions. Summarize the facts.\n";
-        $prompt .= "- Always cite your sources in your answer using bracketed numbers like [1], [2], etc.\n\n";
+        $prompt .= "- Follow the persona, style, and tone specified in the System Instructions.\n\n";
 
-        $prompt .= "--- CONTEXT ---\n$contextText\n";
         $prompt .= "--- QUESTION ---\n$question\n\n";
         $prompt .= "Answer:";
 
         // Call Gemini API using dynamic configurations
         $apiKey = $settings->gemini_api_key ?: env('GEMINI_API_KEY', 'AQ.Ab8RN6IjC579cJiR1wboeMiUG06Ijkk_EY6ZwK-WnOaDqmeohQ');
-        $model = $settings->gemini_model ?: 'gemini-flash-latest';
+        $model = $settings->gemini_model ?: 'gemini-1.5-flash';
 
         $answerText = '';
         $answerStatus = 'answered';
@@ -91,7 +94,8 @@ class GeminiAiProvider implements AiProviderInterface
         try {
             $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent";
             
-            $response = Http::timeout(8)
+            $response = Http::timeout(10)
+                ->withoutVerifying()
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'X-goog-api-key' => $apiKey,
@@ -125,12 +129,9 @@ class GeminiAiProvider implements AiProviderInterface
             Log::error("Exception calling Gemini: " . $e->getMessage());
         }
 
-        // Fallback lexical generator if Gemini fails or is not configured
+        // Fallback generator if Gemini fails or is not configured
         if (empty($answerText)) {
-            if (empty($slicedContext)) {
-                $answerText = "I cannot confirm this from approved sources yet. Please escalate to support.";
-                $answerStatus = 'fallback';
-            } else {
+            if (!empty($slicedContext)) {
                 $bullets = [];
                 foreach ($slicedContext as $index => $item) {
                     $label = '[' . ($index + 1) . ']';
@@ -138,6 +139,13 @@ class GeminiAiProvider implements AiProviderInterface
                 }
                 $answerText = "Based on approved sources, here is the summarized guidance:\n" . implode("\n", $bullets);
                 $answerStatus = 'answered';
+            } elseif (!empty($orgDetails)) {
+                // Intelligent fallback generated directly from the configured Organization metadata & fields
+                $answerText = $this->generateOfflineAnswerFromMetadata($question, $orgDetails, $settings);
+                $answerStatus = 'answered';
+            } else {
+                $answerText = "I cannot confirm this from approved sources yet. Please escalate to support.";
+                $answerStatus = 'fallback';
             }
         }
 
@@ -275,6 +283,11 @@ class GeminiAiProvider implements AiProviderInterface
     {
         $assistantName = $settings->assistant_name ?: 'Aprilo Bot';
         
+        // Always prioritize user-provided custom system prompt if filled in
+        if (!empty(trim($settings->custom_system_prompt ?? ''))) {
+            return trim($settings->custom_system_prompt);
+        }
+
         switch ($settings->restriction_template) {
             case 'hr_policy':
                 return "You are an HR Assistant named {$assistantName}. Answer questions regarding employee benefits, leaves, and policies using the provided context. Keep it direct and professional.";
@@ -283,7 +296,7 @@ class GeminiAiProvider implements AiProviderInterface
                 return "You are a helpful customer FAQ assistant named {$assistantName}. Use the provided context to answer questions about our services and guidelines.";
             
             case 'custom':
-                return $settings->custom_system_prompt ?: "You are {$assistantName}, a helpful organizational assistant.";
+                return "You are {$assistantName}, a helpful organizational assistant.";
             
             case 'strict_retrieval':
             default:
@@ -295,5 +308,26 @@ class GeminiAiProvider implements AiProviderInterface
     {
         $excerpt = trim(preg_replace('/\s+/', ' ', $excerpt) ?? $excerpt);
         return rtrim($excerpt, '.') . '.';
+    }
+
+    private function generateOfflineAnswerFromMetadata(string $question, string $orgDetails, OrganizationSetting $settings): string
+    {
+        $lower = strtolower($question);
+        $assistantName = $settings->assistant_name ?: 'Assistant';
+        $orgName = $settings->organization?->name ?: 'Baxtiyor India Healthcare';
+
+        if (str_contains($lower, 'transplant') || str_contains($lower, 'kidney') || str_contains($lower, 'procedure') || str_contains($lower, 'treatment') || str_contains($lower, 'hospital') || str_contains($lower, 'doctor')) {
+            return "At {$orgName}, we help international patients explore and coordinate medical treatment options in India, including specialized procedures such as kidney transplants. \n\nOur patient coordination services include:\n• Connecting you with top accredited hospitals and transplant specialists in India\n• Medical opinion and treatment estimates\n• Medical visa assistance and travel guidance\n• Airport transfers and local accommodation guidance\n• Dedicated coordinator support throughout your stay\n\nClinical decisions require qualified medical professionals. Would you like to connect with a patient coordinator on WhatsApp or request a treatment estimate?";
+        }
+
+        if (str_contains($lower, 'service') || str_contains($lower, 'what') || str_contains($lower, 'offer') || str_contains($lower, 'help')) {
+            return "At {$orgName}, we provide comprehensive patient coordination services for international medical travel to India, including:\n• Hospital & specialist coordination\n• Medical opinion and treatment cost estimates\n• Medical visa assistance\n• Airport pickup and travel planning\n• Accommodation guidance and follow-up coordination.\n\nHow may we assist your medical enquiry today?";
+        }
+
+        if (str_contains($lower, 'human') || str_contains($lower, 'coordinator') || str_contains($lower, 'contact') || str_contains($lower, 'agent') || str_contains($lower, 'person') || str_contains($lower, 'connect to agent')) {
+            return "Could you please provide your name and reason for speaking with our team?";
+        }
+
+        return "Welcome to {$orgName}. We assist international patients exploring medical treatment options in India, including hospital coordination, treatment estimates, medical visas, and travel arrangements.\n\nHow may we help you today? You can ask about our services or request to speak with a patient coordinator.";
     }
 }

@@ -16,6 +16,7 @@ use App\Models\WidgetConversation;
 use App\Models\WidgetConversationMessage;
 use App\Services\AI\AiAnswerService;
 use App\Services\AI\SensitivityClassifier;
+use App\Services\Firebase\FirebaseSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -24,8 +25,10 @@ use Illuminate\Support\Str;
 
 class WidgetChatController extends Controller
 {
-    public function __construct(private readonly AiAnswerService $aiService)
-    {
+    public function __construct(
+        private readonly AiAnswerService $aiService,
+        private readonly FirebaseSyncService $firebaseSyncService,
+    ) {
     }
 
     public function widgetConfig(Request $request): JsonResponse
@@ -95,6 +98,8 @@ class WidgetChatController extends Controller
                 'id' => $organization->id,
                 'name' => $organization->name,
                 'details' => $settings?->organization_details,
+                'whatsapp_number' => $settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone,
+                'whatsapp_url' => $settings?->getWhatsAppDirectUrl(),
             ],
             'firebase' => [
                 'apiKey' => env('FIREBASE_API_KEY', 'AIzaSyDU5Ce2X5w35sZH81e5nX9i41xXj6YXoMg'),
@@ -157,7 +162,7 @@ class WidgetChatController extends Controller
         abort_unless($conversation->status === 'open', 404);
 
         $organization = $conversation->organization;
-        abort_unless($organization?->hasActiveProductCategory('ai_support'), 403);
+        abort_unless($organization?->hasActiveProductCategory('ai_support') || ($organization?->settings?->is_widget_enabled ?? true), 403);
 
         $conversation->messages()->create([
             'sender_type' => 'user',
@@ -188,7 +193,7 @@ class WidgetChatController extends Controller
             ]);
         }
 
-        $result = $this->processQueryForOrg($organization, $validated['message']);
+        $result = $this->processQueryForOrg($organization, $validated['message'], $conversation, $request);
         $reply = $conversation->messages()->create([
             'sender_type' => 'assistant',
             'message_type' => 'text',
@@ -248,7 +253,7 @@ class WidgetChatController extends Controller
             ]);
         }
 
-        $result = $this->processQueryForOrg($org, $validated['question_text']);
+        $result = $this->processQueryForOrg($org, $validated['question_text'], null, $request);
 
         return response()->json($result);
     }
@@ -370,13 +375,172 @@ class WidgetChatController extends Controller
     }
 
     /**
+     * Hit Cloud Firestore and Firebase RTDB for live agent chat.
+     */
+    public function escalateLiveAgent(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'widget_key' => ['nullable', 'string', 'max:64'],
+            'conversation_id' => ['required', 'string', 'max:120'],
+            'customer_name' => ['required', 'string', 'max:120'],
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $org = $this->resolveOrg($request);
+        $cleanCid = $validated['conversation_id'];
+        $customerName = trim($validated['customer_name']);
+        $reason = trim($validated['reason']);
+
+        // Update local database conversation if it exists
+        $conv = WidgetConversation::where('id', $cleanCid)->where('organization_id', $org->id)->first();
+        if ($conv) {
+            $conv->update(['mode' => 'human_pending']);
+            $conv->messages()->create([
+                'sender_type' => 'user',
+                'message_type' => 'human_request',
+                'content' => "Live Agent requested by {$customerName}. Reason: {$reason}",
+                'sender_name' => $customerName,
+                'metadata' => [
+                    'customer_name' => $customerName,
+                    'reason' => $reason,
+                    'status' => 'pending',
+                ],
+            ]);
+        }
+
+        $synced = $this->firebaseSyncService->escalateToLiveAgent(
+            (string) $org->id,
+            $cleanCid,
+            $customerName,
+            $reason
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Escalated to live agent successfully.',
+            'mode' => 'human_pending',
+            'conversation_id' => $cleanCid,
+            'firestore_and_rtdb_synced' => $synced,
+        ]);
+    }
+
+    /**
      * Core RAG / Cache / DB validation chat pipeline.
      */
-    private function processQueryForOrg(Organization $org, string $questionText): array
+    private function processQueryForOrg(Organization $org, string $questionText, ?WidgetConversation $conversation = null, ?Request $request = null): array
     {
+        $cleanQuery = strtolower(trim($questionText));
+
+        // 1. Live Agent 2-step Escalation Handshake
+        // Step 1: User asks to connect to an agent -> Ask for their name & reason (NO WhatsApp link yet, no button yet).
+        // Step 2: User provides their name & reason -> Acknowledge and display the 2 action buttons (live-whatsapp & live-agent).
+        $sessionToken = $conversation ? $conversation->id : ($request?->input('session_id') ?? $request?->ip() ?? 'guest');
+        $handshakeKey = 'agent_handshake:' . $org->id . ':' . $sessionToken;
+        $isAwaitingInfo = (bool) \Illuminate\Support\Facades\Cache::get($handshakeKey, false);
+
+        if (!$isAwaitingInfo && $conversation) {
+            $lastAssistantMsg = $conversation->messages()->where('sender_type', 'assistant')->latest()->first();
+            if ($lastAssistantMsg && str_contains($lastAssistantMsg->content, 'provide your name and reason')) {
+                $isAwaitingInfo = true;
+            }
+        }
+
+        $isAgentRequest = (bool) preg_match('/\b(connect(\s+to)?\s+agent|talk\s+to\s+(a\s+)?(human|agent|coordinator|specialist|person)|speak\s+with\s+(a\s+)?(human|agent|coordinator|specialist)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(agent|human))\b/i', $cleanQuery)
+            || in_array($cleanQuery, ['agent', 'connect to agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human']);
+
+        if ($isAgentRequest && !$isAwaitingInfo) {
+            \Illuminate\Support\Facades\Cache::put($handshakeKey, true, 900); // 15 mins
+
+            $replyText = "Could you please provide your name and reason for speaking with our team?";
+            $dummyUser = User::where('organization_id', $org->id)->first();
+            $question = Question::create([
+                'organization_id' => $org->id,
+                'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
+                'question_text' => $questionText,
+                'topic' => 'agent_escalation_request',
+                'sensitivity_status' => 'normal',
+                'status' => 'answered',
+            ]);
+
+            return [
+                'question_id' => $question->id,
+                'answer_text' => $replyText,
+                'answer_status' => 'answered',
+                'sources' => [],
+            ];
+        }
+
+        if ($isAwaitingInfo) {
+            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
+
+            $name = '';
+            $reason = '';
+
+            if (preg_match('/^([^,:\-\n]+)[,:\-]\s*(.+)$/i', $questionText, $m)) {
+                $name = trim($m[1]);
+                $reason = trim($m[2]);
+            } elseif (preg_match('/(?:my\s+name\s+is|i\s+am|i\'m)\s+([a-zA-Z\s]+?)(?:,|\.|\sand\s|\smy\s+reason\s+is|\sreason\s+is|\sfor\s|\sto\s)(.+)/i', $questionText, $m)) {
+                $name = trim($m[1]);
+                $reason = trim($m[2]);
+            } else {
+                $parts = explode(' ', trim($questionText), 2);
+                $name = trim($parts[0]);
+                $reason = isset($parts[1]) ? trim($parts[1]) : 'Medical enquiry';
+            }
+
+            $name = preg_replace('/^(my\s+name\s+is|i\s+am|i\'m)\s+/i', '', $name);
+            $reason = preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason:)\s*/i', '', $reason);
+
+            if (empty($name)) {
+                $name = 'Patient';
+            }
+            if (empty($reason)) {
+                $reason = 'Medical enquiry';
+            }
+
+            $prefilledText = "Hello, my name is {$name}. I would like to speak with a patient coordinator regarding: {$reason}.";
+            $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
+                ?: (config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1')) . '?text=' . rawurlencode($prefilledText));
+
+            $convId = $conversation ? $conversation->id : '';
+            $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+            $safeReason = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
+            $safeNameAttr = addslashes($safeName);
+            $safeReasonAttr = addslashes($safeReason);
+
+            $replyText = "Thank you, {$name}! I have noted your reason: {$reason}.\n\nHow would you like to connect with our team?\n\n" .
+                "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
+                "  <a href=\"{$whatsappUrlWithText}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
+                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
+                "    <span>Connect on WhatsApp</span>\n" .
+                "  </a>\n" .
+                "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '{$safeReasonAttr}', '{$convId}')\">\n" .
+                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
+                "    <span>Chat with Live Agent</span>\n" .
+                "  </button>\n" .
+                "</div>";
+
+            $dummyUser = User::where('organization_id', $org->id)->first();
+            $question = Question::create([
+                'organization_id' => $org->id,
+                'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
+                'question_text' => $questionText,
+                'topic' => 'agent_escalation_details',
+                'sensitivity_status' => 'normal',
+                'status' => 'answered',
+            ]);
+
+            return [
+                'question_id' => $question->id,
+                'answer_text' => $replyText,
+                'answer_status' => 'answered',
+                'sources' => [],
+            ];
+        }
+
         $cacheKey = 'widget_chat_cache:' . $org->id . ':' . md5(strtolower(trim($questionText)));
 
-        // 1. Memory Cache lookup
+        // 2. Memory Cache lookup
         if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
             $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
             $dummyUser = User::where('organization_id', $org->id)->first();
@@ -529,6 +693,7 @@ class WidgetChatController extends Controller
 
         // Sort by score descending
         usort($ranked, fn ($a, $b) => $b['score'] <=> $a['score']);
+        $contexts = array_slice($ranked, 0, 5);
         $aiResult = $this->aiService->answer($questionText, $contexts, [
             'organization' => $org,
             'settings' => $org->settings,
@@ -602,6 +767,13 @@ class WidgetChatController extends Controller
             ?? $request->query('widget_key')
             ?? $request->header('X-Widget-Key');
 
+        if (empty($widgetKey) && $request->filled('conversation_id')) {
+            $conv = WidgetConversation::find($request->input('conversation_id'));
+            if ($conv && $conv->organization) {
+                return $conv->organization;
+            }
+        }
+
         abort_unless(is_string($widgetKey) && $widgetKey !== '', 400, 'A widget_key is required.');
 
         // First-party Aprilo Infotech website mapping
@@ -618,7 +790,13 @@ class WidgetChatController extends Controller
         $organization = $settings->organization;
 
         abort_unless($organization?->status === 'active', 403, 'This organization is inactive.');
-        abort_unless($organization->hasActiveProductCategory('ai_support'), 403, 'Aprilo Support AI is not active for this organization.');
+        abort_unless(
+            $organization->hasActiveProductCategory('ai_support')
+            || $organization->hasActiveProductCategory('chatbot')
+            || ($settings->is_widget_enabled ?? true),
+            403,
+            'Aprilo Support AI is not active for this organization.'
+        );
 
         return $organization;
     }

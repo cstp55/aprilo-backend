@@ -500,5 +500,96 @@ class FirebaseSyncService
             return false;
         }
     }
+
+    /**
+     * Hit Cloud Firestore and Firebase Realtime Database to trigger Live Agent escalation.
+     */
+    public function escalateToLiveAgent(string $orgId, string $conversationId, string $customerName, string $reason): bool
+    {
+        $now = now()->toIso8601String();
+        $cleanCid = preg_replace('/[^a-zA-Z0-9_-]/', '', $conversationId);
+        $messageText = "Live Agent requested by {$customerName}. Reason: {$reason}";
+
+        // 1. Write message to Cloud Firestore
+        try {
+            Http::withoutVerifying()->timeout(8)->post(
+                "{$this->firestoreBaseUrl}/messages?key={$this->apiKey}",
+                [
+                    'fields' => [
+                        'conversation_id' => ['stringValue' => $cleanCid],
+                        'organization_id' => ['stringValue' => $orgId],
+                        'sender_type' => ['stringValue' => 'user'],
+                        'sender_name' => ['stringValue' => $customerName],
+                        'message_type' => ['stringValue' => 'human_request'],
+                        'content' => ['stringValue' => $messageText],
+                        'reason' => ['stringValue' => $reason],
+                        'status' => ['stringValue' => 'pending'],
+                        'created_at' => ['stringValue' => $now],
+                    ]
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::warning('FirebaseSyncService: Error posting message to Firestore: ' . $e->getMessage());
+        }
+
+        // 2. Write to Firebase Realtime Database
+        if (!empty($this->rtdbBaseUrl)) {
+            try {
+                // Update conversation mode to human_pending
+                Http::withoutVerifying()->timeout(8)->patch(
+                    "{$this->rtdbBaseUrl}/tenants/{$orgId}/conversations/{$cleanCid}.json",
+                    [
+                        'id' => $cleanCid,
+                        'conversation_id' => $cleanCid,
+                        'organization_id' => $orgId,
+                        'customer_name' => $customerName,
+                        'mode' => 'human_pending',
+                        'status' => 'waiting',
+                        'last_message_preview' => $messageText,
+                        'human_requested_at' => $now,
+                        'last_message_at' => $now,
+                    ]
+                );
+
+                // Push human requested event
+                $eventId = 'evt_' . $cleanCid;
+                Http::withoutVerifying()->timeout(5)->patch(
+                    "{$this->rtdbBaseUrl}/tenants/{$orgId}/events/{$eventId}.json",
+                    [
+                        'id' => $eventId,
+                        'type' => 'HUMAN_REQUESTED',
+                        'event' => 'HUMAN_REQUESTED',
+                        'conversation_id' => $cleanCid,
+                        'customer_name' => $customerName,
+                        'reason' => $reason,
+                        'status' => 'pending',
+                        'created_at' => $now,
+                    ]
+                );
+
+                // Push message to tenant conversation messages thread
+                $msgKey = 'msg_' . time() . '_' . substr(md5(uniqid()), 0, 6);
+                Http::withoutVerifying()->timeout(5)->put(
+                    "{$this->rtdbBaseUrl}/tenants/{$orgId}/messages/{$cleanCid}/{$msgKey}.json",
+                    [
+                        'id' => $msgKey,
+                        'conversation_id' => $cleanCid,
+                        'sender_type' => 'user',
+                        'sender_name' => $customerName,
+                        'message_type' => 'human_request',
+                        'content' => $messageText,
+                        'created_at' => $now,
+                        'status' => 'delivered',
+                    ]
+                );
+
+                return true;
+            } catch (\Throwable $e) {
+                Log::warning('FirebaseSyncService: Error posting live agent escalation to RTDB: ' . $e->getMessage());
+            }
+        }
+
+        return false;
+    }
 }
 

@@ -30,6 +30,49 @@
         </div>
     @endif
 
+    <style>
+        .aprilo-action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .aprilo-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+            font-family: inherit;
+            line-height: 1.3;
+        }
+        .aprilo-btn-whatsapp {
+            background: #25D366;
+            color: #FFFFFF !important;
+            border-color: #20bd5a;
+        }
+        .aprilo-btn-whatsapp:hover {
+            background: #20bd5a;
+            box-shadow: 0 3px 10px rgba(37, 211, 102, 0.35);
+        }
+        .aprilo-btn-liveagent {
+            background: #0284c7;
+            color: #FFFFFF !important;
+            border-color: #0369a1;
+        }
+        .aprilo-btn-liveagent:hover {
+            background: #0369a1;
+            box-shadow: 0 3px 10px rgba(2, 132, 199, 0.35);
+        }
+    </style>
+
     <div class="grid grid-2" style="align-items: start; gap: 24px;">
         <!-- Left Column: Form & Keys -->
         <div>
@@ -107,6 +150,11 @@
                     <label class="field" style="margin-bottom: 14px;">Welcome greeting message
                         <textarea id="input-welcome-message" name="welcome_message" rows="2" style="width: 100%; font-size: 13px; resize: vertical;" placeholder="{{ $defaultWelcomeMessage }}">{{ old('welcome_message', $settings->welcome_message ?: $defaultWelcomeMessage) }}</textarea>
                         <span class="help" style="font-size: 11.5px; margin-top: 4px;">Displayed to customers at the top of the chat panel when the widget opens.</span>
+                    </label>
+
+                    <label class="field" style="margin-bottom: 14px;">WhatsApp Number or Direct Link (External WhatsApp Chat)
+                        <input id="input-whatsapp-number" name="whatsapp_number" type="text" value="{{ old('whatsapp_number', $settings->whatsapp_number ?: $settings->whatsapp_sender_phone) }}" placeholder="+919876543210 or https://wa.me/message/BE3K4RAO24GXK1">
+                        <span class="help" style="font-size: 11.5px; margin-top: 4px;">Destination phone number or wa.me link used when visitors click "Connect on WhatsApp" (e.g. <code>+91 98765 43210</code> or direct <code>https://wa.me/message/BE3K4RAO24GXK1</code>).</span>
                     </label>
 
                     <label class="field">Organization description & metadata
@@ -269,9 +317,7 @@
                                         🤖
                                     @endif
                                 </div>
-                                <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 82%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                                    Hi there! I am ready to assist you with inquiries regarding <strong>{{ $organization->name }}</strong>. Feel free to type a test question below!
-                                </div>
+                                <div id="sim-initial-bubble" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 82%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03); white-space: pre-wrap;">{{ old('welcome_message', $settings->welcome_message ?: ("Hi there! I am ready to assist you with inquiries regarding " . $organization->name . ". Feel free to type a test question below!")) }}</div>
                             </div>
 
                         </div>
@@ -415,7 +461,10 @@
 
             if (welcomeInput) {
                 welcomeInput.addEventListener('input', function() {
-                    simWelcomeText.textContent = this.value.trim() || 'Welcome! How can we assist you?';
+                    const val = this.value.trim() || 'Welcome! How can we assist you?';
+                    if (simWelcomeText) simWelcomeText.textContent = val;
+                    const initialBubble = document.getElementById('sim-initial-bubble');
+                    if (initialBubble) initialBubble.textContent = val;
                 });
             }
         })();
@@ -478,20 +527,67 @@
             }
         };
 
+        let isAwaitingAgentInfo = false;
+
         function simulateLocalResponse(query) {
             const nameInput = document.getElementById('input-assistant-name');
             const assistantName = (nameInput ? nameInput.value.trim() : '') || `${orgName} Assistant`;
             const lower = query.toLowerCase();
 
             let reply = '';
-            if (lower.includes('hi') || lower.includes('hello') || lower.includes('hey')) {
-                reply = `Hello! I am ${assistantName} for ${orgName}. How can I assist you with our services today?`;
-            } else if (lower.includes('service') || lower.includes('what') || lower.includes('solution')) {
-                reply = `${orgName} provides professional solutions and customer support. Please feel free to ask about our specific offerings, consultations, or assistance procedures.`;
-            } else if (lower.includes('contact') || lower.includes('support') || lower.includes('call')) {
-                reply = `You can reach ${orgName} support directly through our official channels. We are also happy to escalate your inquiry to an active agent.`;
+            const isAgentQuery = lower.includes('agent') || lower.includes('human') || lower.includes('coordinator') || lower.includes('person') || lower.includes('speak with') || lower.includes('talk to');
+
+            if (isAgentQuery && !isAwaitingAgentInfo) {
+                isAwaitingAgentInfo = true;
+                reply = "Could you please provide your name and reason for speaking with our team?";
+            } else if (isAwaitingAgentInfo) {
+                isAwaitingAgentInfo = false;
+                let name = 'Patient';
+                let reason = 'Medical enquiry';
+
+                if (query.includes(',') || query.includes(':') || query.includes('-')) {
+                    const parts = query.split(/[,:\-]/);
+                    name = parts[0].trim();
+                    reason = parts.slice(1).join(' ').trim();
+                } else {
+                    const words = query.trim().split(/\s+/);
+                    name = words[0];
+                    reason = words.slice(1).join(' ') || 'Medical enquiry';
+                }
+
+                name = name.replace(/^(my\s+name\s+is|i\s+am|i\'m)\s+/i, '') || 'Patient';
+                reason = reason.replace(/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason:)\s*/i, '') || 'Medical enquiry';
+
+                const whatsappInput = document.getElementById('input-whatsapp-number');
+                let whatsappRaw = (whatsappInput ? whatsappInput.value.trim() : '') || 'https://wa.me/message/BE3K4RAO24GXK1';
+                const prefilled = `Hello, my name is ${name}. I would like to speak with a patient coordinator regarding: ${reason}.`;
+                let whatsappUrl = '';
+                if (whatsappRaw.startsWith('http://') || whatsappRaw.startsWith('https://') || whatsappRaw.startsWith('wa.me/')) {
+                    const base = whatsappRaw.startsWith('wa.me/') ? 'https://' + whatsappRaw : whatsappRaw;
+                    whatsappUrl = `${base}${base.includes('?') ? '&' : '?'}text=${encodeURIComponent(prefilled)}`;
+                } else {
+                    const digits = whatsappRaw.replace(/[^0-9]/g, '');
+                    whatsappUrl = `https://wa.me/${digits || 'message/BE3K4RAO24GXK1'}?text=${encodeURIComponent(prefilled)}`;
+                }
+
+                reply = `Thank you, ${name}! I have noted your reason: ${reason}.\n\nHow would you like to connect with our team?\n\n` +
+                    `<div class="aprilo-action-buttons">` +
+                    `<a href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" class="aprilo-btn aprilo-btn-whatsapp" id="live-whatsapp-btn">` +
+                    `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;"><path d="M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z"/></svg>` +
+                    `<span>Connect on WhatsApp</span></a>` +
+                    `<button type="button" class="aprilo-btn aprilo-btn-liveagent" id="live-agent-btn" onclick="window.ApriloConnectLiveAgent('${name.replace(/'/g, "\\'")}', '${reason.replace(/'/g, "\\'")}')">` +
+                    `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>` +
+                    `<span>Chat with Live Agent</span></button>` +
+                    `</div>`;
+            } else if (lower.includes('transplant') || lower.includes('kidney') || lower.includes('procedure') || lower.includes('treatment') || lower.includes('hospital') || lower.includes('doctor')) {
+                reply = `At ${orgName}, we help international patients explore and coordinate medical treatment options in India, including specialized procedures such as kidney transplants.\n\nOur patient coordination services include:\n• Connecting you with top accredited hospitals and transplant specialists in India\n• Medical opinion and treatment estimates\n• Medical visa assistance and travel guidance\n• Airport transfers and local accommodation guidance\n• Dedicated coordinator support throughout your stay\n\nClinical decisions require qualified medical professionals. Would you like to connect with a patient coordinator on WhatsApp or request a treatment estimate?`;
+            } else if (lower.includes('service') || lower.includes('what') || lower.includes('offer') || lower.includes('help') || lower.includes('solution')) {
+                reply = `At ${orgName}, we provide comprehensive patient coordination services for international medical travel to India, including:\n• Hospital & specialist coordination\n• Medical opinion and treatment cost estimates\n• Medical visa assistance\n• Airport pickup and travel planning\n• Accommodation guidance and follow-up coordination.\n\nHow may we assist your medical enquiry today?`;
+            } else if (lower.includes('hi') || lower.includes('hello') || lower.includes('hey')) {
+                const welcomeInput = document.getElementById('input-welcome-message');
+                reply = welcomeInput && welcomeInput.value.trim() ? welcomeInput.value.trim() : `Hello! I am ${assistantName} for ${orgName}. How can I assist you with our services today?`;
             } else {
-                reply = `Thank you for your question about ${orgName}. I am configured to assist you with verified organization information and service inquiries.`;
+                reply = `Thank you for reaching out to ${orgName}. We assist international patients exploring medical treatment options in India, including hospital coordination, treatment estimates, medical visas, and travel arrangements.\n\nHow may we assist your medical enquiry today?`;
             }
 
             renderAssistantResponse(reply, []);
@@ -510,20 +606,62 @@
                     sources.map(s => s.citation_label ? s.citation_label : '[Doc]').join(', ') + '</div>';
             }
 
+            // Check if text has interactive action buttons
+            let contentHtml = '';
+            if (text.includes('<div class="aprilo-action-buttons"')) {
+                const parts = text.split('<div class="aprilo-action-buttons"');
+                const textPart = parts[0].trim();
+                const buttonsPart = '<div class="aprilo-action-buttons"' + parts[1];
+                contentHtml = `<div style="white-space: pre-wrap;">${escapeHtml(textPart)}</div>${buttonsPart}`;
+            } else {
+                contentHtml = `<div style="white-space: pre-wrap;">${escapeHtml(text)}</div>`;
+            }
+
             const botMsgDiv = document.createElement('div');
             botMsgDiv.style.cssText = 'display: flex; gap: 8px; align-items: flex-start; margin-top: 4px;';
             botMsgDiv.innerHTML = `
                 <div style="width: 26px; height: 26px; border-radius: 50%; background: ${currentColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px;">
                     ${currentEmoji}
                 </div>
-                <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 82%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                    ${escapeHtml(text)}
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 85%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                    ${contentHtml}
                     ${sourcesHtml}
                 </div>
             `;
             body.appendChild(botMsgDiv);
             body.scrollTop = body.scrollHeight;
         }
+
+        window.ApriloConnectLiveAgent = async function(name, reason, convId) {
+            const body = document.getElementById('sim-chat-body');
+            const alertDiv = document.createElement('div');
+            alertDiv.style.cssText = 'background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; border-radius: 8px; padding: 8px 12px; font-size: 11.5px; margin-top: 6px; display: flex; align-items: center; gap: 6px;';
+            alertDiv.innerHTML = `⏳ <strong>Connecting to Live Agent...</strong> Escalating request for <em>${escapeHtml(name)}</em> to Cloud Firestore & Firebase RTDB.`;
+            body.appendChild(alertDiv);
+            body.scrollTop = body.scrollHeight;
+
+            try {
+                const res = await fetch(`${apiUrl.replace(/\/+$/, '')}/api/widget/escalate-live`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        widget_key: widgetKey,
+                        conversation_id: convId || ('preview_conv_' + Date.now()),
+                        customer_name: name,
+                        reason: reason
+                    })
+                });
+
+                if (res.ok) {
+                    alertDiv.style.background = '#dcfce7';
+                    alertDiv.style.color = '#15803d';
+                    alertDiv.style.borderColor = '#bbf7d0';
+                    alertDiv.innerHTML = `✨ <strong>Live Agent Connected!</strong> Escalation stored in Cloud Firestore and queued on Firebase RTDB. Agent will join your chat.`;
+                }
+            } catch (e) {
+                console.warn('Escalation call error:', e);
+            }
+        };
 
         window.resetSimulatedChat = function() {
             const body = document.getElementById('sim-chat-body');
@@ -556,9 +694,7 @@
                     <div id="sim-avatar-small" style="width: 26px; height: 26px; border-radius: 50%; background: ${currentColor}; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; margin-top: 2px;">
                         ${currentEmoji}
                     </div>
-                    <div style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 82%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                        Hi there! I am ready to assist you with inquiries regarding <strong>${escapeHtml(orgName)}</strong>. Feel free to type a test question below!
-                    </div>
+                    <div id="sim-initial-bubble" style="background: #ffffff; border: 1px solid #e2e8f0; padding: 9px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; color: #1e293b; max-width: 82%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03); white-space: pre-wrap;">${escapeHtml(document.getElementById('input-welcome-message')?.value.trim() || `Welcome to ${orgName}!`)}</div>
                 </div>
             `;
         };

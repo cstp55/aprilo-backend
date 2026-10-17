@@ -53,6 +53,7 @@ class OrganizationSetting extends Model
         'whatsapp_connected',
         'whatsapp_use_sandbox',
         'whatsapp_sender_phone',
+        'whatsapp_number',
         'whatsapp_message_template',
         'whatsapp_brand_approval_status',
         
@@ -134,5 +135,31 @@ class OrganizationSetting extends Model
         }
 
         return $this->public_widget_key;
+    }
+
+    public function getWhatsAppDirectUrl(string $prefilledText = ''): string
+    {
+        $raw = trim($this->whatsapp_number ?: $this->whatsapp_sender_phone ?: '');
+        if (empty($raw)) {
+            $raw = config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1'));
+        }
+
+        // If it's already a full wa.me or whatsapp link
+        if (str_starts_with($raw, 'http://') || str_starts_with($raw, 'https://') || str_starts_with($raw, 'wa.me/')) {
+            $url = str_starts_with($raw, 'wa.me/') ? 'https://' . $raw : $raw;
+            if (!empty($prefilledText)) {
+                $separator = str_contains($url, '?') ? '&' : '?';
+                return $url . $separator . 'text=' . rawurlencode($prefilledText);
+            }
+            return $url;
+        }
+
+        // Clean digits for international phone number
+        $cleanPhone = preg_replace('/[^0-9]/', '', $raw);
+        $url = "https://wa.me/{$cleanPhone}";
+        if (!empty($prefilledText)) {
+            $url .= '?text=' . rawurlencode($prefilledText);
+        }
+        return $url;
     }
 }

@@ -38,6 +38,7 @@ Route::post('/widget/conversations', [\App\Http\Controllers\Api\WidgetChatContro
 Route::post('/widget/conversations/{conversation}/messages', [\App\Http\Controllers\Api\WidgetChatController::class, 'createConversationMessage']);
 Route::post('/widget/chat', [\App\Http\Controllers\Api\WidgetChatController::class, 'chat']);
 Route::post('/widget/escalate', [\App\Http\Controllers\Api\WidgetChatController::class, 'escalate']);
+Route::post('/widget/escalate-live', [\App\Http\Controllers\Api\WidgetChatController::class, 'escalateLiveAgent']);
 Route::post('/widget/inbound-email', [\App\Http\Controllers\Api\WidgetChatController::class, 'inboundEmail']);
 
 Route::post('/teams/messages', [\App\Http\Controllers\Api\TeamsBotController::class, 'handleMessage']);

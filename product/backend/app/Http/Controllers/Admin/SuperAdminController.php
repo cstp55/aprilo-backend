@@ -191,6 +191,8 @@ class SuperAdminController extends Controller
             'live_chat_enabled' => ['nullable', 'boolean'],
             'is_widget_enabled' => ['nullable', 'boolean'],
             'welcome_message' => ['nullable', 'string', 'max:1000'],
+            'whatsapp_number' => ['nullable', 'string', 'max:100'],
+            'whatsapp_sender_phone' => ['nullable', 'string', 'max:100'],
             'organization_details' => ['nullable', 'string', 'max:5000'],
             'custom_system_prompt' => ['nullable', 'string', 'max:5000'],
             'restriction_template' => ['nullable', Rule::in(['general_faq', 'strict_retrieval', 'hr_policy', 'custom'])],
