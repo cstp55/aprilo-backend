@@ -312,22 +312,83 @@ class GeminiAiProvider implements AiProviderInterface
 
     private function generateOfflineAnswerFromMetadata(string $question, string $orgDetails, OrganizationSetting $settings): string
     {
-        $lower = strtolower($question);
+        $lower = strtolower(trim($question));
         $assistantName = $settings->assistant_name ?: 'Assistant';
-        $orgName = $settings->organization?->name ?: 'Baxtiyor India Healthcare';
+        $org = $settings->organization;
+        $orgName = $org?->name ?: 'our organization';
+        $systemPrompt = trim($settings->custom_system_prompt ?? '');
+        $guardrails = trim($settings->eligibility_criteria ?? '');
+        $orgContext = trim($orgDetails ?: ($settings->organization_details ?? ''));
 
-        if (str_contains($lower, 'transplant') || str_contains($lower, 'kidney') || str_contains($lower, 'procedure') || str_contains($lower, 'treatment') || str_contains($lower, 'hospital') || str_contains($lower, 'doctor')) {
-            return "At {$orgName}, we help international patients explore and coordinate medical treatment options in India, including specialized procedures such as kidney transplants. \n\nOur patient coordination services include:\n• Connecting you with top accredited hospitals and transplant specialists in India\n• Medical opinion and treatment estimates\n• Medical visa assistance and travel guidance\n• Airport transfers and local accommodation guidance\n• Dedicated coordinator support throughout your stay\n\nClinical decisions require qualified medical professionals. Would you like to connect with a patient coordinator on WhatsApp or request a treatment estimate?";
+        // 1. Live human / agent / coordinator request
+        if (preg_match('/\b(human|agent|coordinator|specialist|person|representative|support team|connect to agent|talk to human)\b/i', $lower)) {
+            return "To connect you with our live support team, could you please provide your **Name**, **Email address**, and **Reason** for reaching out?";
         }
 
-        if (str_contains($lower, 'service') || str_contains($lower, 'what') || str_contains($lower, 'offer') || str_contains($lower, 'help')) {
-            return "At {$orgName}, we provide comprehensive patient coordination services for international medical travel to India, including:\n• Hospital & specialist coordination\n• Medical opinion and treatment cost estimates\n• Medical visa assistance\n• Airport pickup and travel planning\n• Accommodation guidance and follow-up coordination.\n\nHow may we assist your medical enquiry today?";
+        // 2. Greetings
+        if (preg_match('/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|hola)(\s*|[!?.].*)$/i', $lower)) {
+            if (!empty($settings->welcome_message)) {
+                return $settings->welcome_message;
+            }
+            return "Hello! I am {$assistantName}, the virtual assistant for {$orgName}. How can I assist you today?";
         }
 
-        if (str_contains($lower, 'human') || str_contains($lower, 'coordinator') || str_contains($lower, 'contact') || str_contains($lower, 'agent') || str_contains($lower, 'person') || str_contains($lower, 'connect to agent')) {
-            return "Could you please provide your name and reason for speaking with our team?";
+        // 3. Search organization context & system prompt for matching query terms
+        $allKnowledge = $orgContext . "\n\n" . $systemPrompt;
+        $paragraphs = array_filter(array_map('trim', explode("\n\n", $allKnowledge)));
+
+        $stopwords = ['what', 'is', 'are', 'the', 'how', 'can', 'you', 'i', 'do', 'does', 'in', 'on', 'at', 'to', 'for', 'a', 'an', 'and', 'or', 'about', 'tell', 'me', 'please', 'we', 'our', 'my'];
+        $words = array_filter(preg_split('/[^a-z0-9_-]+/', $lower), fn($w) => strlen($w) > 2 && !in_array($w, $stopwords));
+
+        $bestParagraph = '';
+        $bestScore = 0;
+
+        foreach ($paragraphs as $para) {
+            $paraLower = strtolower($para);
+            $score = 0;
+            foreach ($words as $w) {
+                if (str_contains($paraLower, $w)) {
+                    $score += 2;
+                }
+            }
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestParagraph = $para;
+            }
         }
 
-        return "Welcome to {$orgName}. We assist international patients exploring medical treatment options in India, including hospital coordination, treatment estimates, medical visas, and travel arrangements.\n\nHow may we help you today? You can ask about our services or request to speak with a patient coordinator.";
+        if ($bestScore >= 2 && !empty($bestParagraph)) {
+            $reply = $bestParagraph;
+            $whatsappUrl = $settings->getWhatsAppDirectUrl();
+            if ($whatsappUrl) {
+                $reply .= "\n\nWould you like more information or to connect directly with our team?";
+            }
+            return $reply;
+        }
+
+        // 4. Services / Offerings inquiry
+        if (str_contains($lower, 'service') || str_contains($lower, 'what do you do') || str_contains($lower, 'offer') || str_contains($lower, 'about')) {
+            if (!empty($orgContext)) {
+                return "At {$orgName}, here is how we can assist you:\n\n{$orgContext}\n\nHow can we help you today?";
+            }
+            return "At {$orgName}, we provide professional solutions and services. How may I assist your inquiry today?";
+        }
+
+        // 5. Contact / WhatsApp inquiry
+        if (str_contains($lower, 'contact') || str_contains($lower, 'whatsapp') || str_contains($lower, 'phone') || str_contains($lower, 'reach')) {
+            $whatsappUrl = $settings->getWhatsAppDirectUrl();
+            $waNumber = $settings->whatsapp_number ?: $settings->whatsapp_sender_phone;
+            if ($whatsappUrl) {
+                return "You can reach the {$orgName} team directly on WhatsApp" . ($waNumber ? " ({$waNumber})" : "") . ":\n\n[Connect on WhatsApp]({$whatsappUrl})\n\nOr reply here and request to speak with a live agent!";
+            }
+            return "You can reach {$orgName} support directly by asking to connect with a live agent right here in this chat!";
+        }
+
+        // 6. Default organization-aware fallback
+        if (!empty($orgContext)) {
+            return "Welcome to {$orgName}.\n\n{$orgContext}\n\nHow may I help you today? You can ask about our services, policies, or request to speak with our support team.";
+        }
+
+        return "Welcome to {$orgName}. I am {$assistantName}, your assistant. How may I help you with our services today? You can ask a question or request to speak with a live agent.";
     }
 }

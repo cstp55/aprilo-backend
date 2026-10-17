@@ -383,25 +383,29 @@ class WidgetChatController extends Controller
             'widget_key' => ['nullable', 'string', 'max:64'],
             'conversation_id' => ['required', 'string', 'max:120'],
             'customer_name' => ['required', 'string', 'max:120'],
+            'customer_email' => ['nullable', 'string', 'max:120'],
             'reason' => ['required', 'string', 'max:2000'],
         ]);
 
         $org = $this->resolveOrg($request);
         $cleanCid = $validated['conversation_id'];
         $customerName = trim($validated['customer_name']);
+        $customerEmail = trim($validated['customer_email'] ?? '');
         $reason = trim($validated['reason']);
 
         // Update local database conversation if it exists
         $conv = WidgetConversation::where('id', $cleanCid)->where('organization_id', $org->id)->first();
         if ($conv) {
             $conv->update(['mode' => 'human_pending']);
+            $emailSnippet = $customerEmail ? " ({$customerEmail})" : "";
             $conv->messages()->create([
                 'sender_type' => 'user',
                 'message_type' => 'human_request',
-                'content' => "Live Agent requested by {$customerName}. Reason: {$reason}",
+                'content' => "Live Agent requested by {$customerName}{$emailSnippet}. Reason: {$reason}",
                 'sender_name' => $customerName,
                 'metadata' => [
                     'customer_name' => $customerName,
+                    'customer_email' => $customerEmail,
                     'reason' => $reason,
                     'status' => 'pending',
                 ],
@@ -412,7 +416,8 @@ class WidgetChatController extends Controller
             (string) $org->id,
             $cleanCid,
             $customerName,
-            $reason
+            $reason,
+            $customerEmail
         );
 
         return response()->json([
@@ -431,27 +436,29 @@ class WidgetChatController extends Controller
     {
         $cleanQuery = strtolower(trim($questionText));
 
-        // 1. Live Agent 2-step Escalation Handshake
-        // Step 1: User asks to connect to an agent -> Ask for their name & reason (NO WhatsApp link yet, no button yet).
-        // Step 2: User provides their name & reason -> Acknowledge and display the 2 action buttons (live-whatsapp & live-agent).
+        // 1. Live Agent Mandatory 3-Field Escalation Handshake (Name, Email, Reason)
         $sessionToken = $conversation ? $conversation->id : ($request?->input('session_id') ?? $request?->ip() ?? 'guest');
         $handshakeKey = 'agent_handshake:' . $org->id . ':' . $sessionToken;
         $isAwaitingInfo = (bool) \Illuminate\Support\Facades\Cache::get($handshakeKey, false);
 
         if (!$isAwaitingInfo && $conversation) {
             $lastAssistantMsg = $conversation->messages()->where('sender_type', 'assistant')->latest()->first();
-            if ($lastAssistantMsg && str_contains($lastAssistantMsg->content, 'provide your name and reason')) {
+            if ($lastAssistantMsg && (
+                str_contains($lastAssistantMsg->content, 'Name, Email') ||
+                str_contains($lastAssistantMsg->content, 'name, email') ||
+                str_contains($lastAssistantMsg->content, 'provide your name and reason')
+            )) {
                 $isAwaitingInfo = true;
             }
         }
 
-        $isAgentRequest = (bool) preg_match('/\b(connect(\s+to)?\s+agent|talk\s+to\s+(a\s+)?(human|agent|coordinator|specialist|person)|speak\s+with\s+(a\s+)?(human|agent|coordinator|specialist)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(agent|human))\b/i', $cleanQuery)
-            || in_array($cleanQuery, ['agent', 'connect to agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human']);
+        $isAgentRequest = (bool) preg_match('/\b(connect(\s+to)?\s+agent|talk\s+to\s+(a\s+)?(human|agent|coordinator|specialist|person|representative)|speak\s+with\s+(a\s+)?(human|agent|coordinator|specialist|representative)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(agent|human))\b/i', $cleanQuery)
+            || in_array($cleanQuery, ['agent', 'connect to agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human', 'human support']);
 
         if ($isAgentRequest && !$isAwaitingInfo) {
             \Illuminate\Support\Facades\Cache::put($handshakeKey, true, 900); // 15 mins
 
-            $replyText = "Could you please provide your name and reason for speaking with our team?";
+            $replyText = "To connect you with our live support team, could you please provide your **Name**, **Email address**, and **Reason** for reaching out?";
             $dummyUser = User::where('organization_id', $org->id)->first();
             $question = Question::create([
                 'organization_id' => $org->id,
@@ -471,54 +478,99 @@ class WidgetChatController extends Controller
         }
 
         if ($isAwaitingInfo) {
-            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
+            // Extract Email if provided
+            $email = '';
+            if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $questionText, $emailMatches)) {
+                $email = trim($emailMatches[0]);
+            }
+
+            // Remove email from text to parse name and reason
+            $textWithoutEmail = trim(str_replace($email, '', $questionText));
 
             $name = '';
             $reason = '';
 
-            if (preg_match('/^([^,:\-\n]+)[,:\-]\s*(.+)$/i', $questionText, $m)) {
-                $name = trim($m[1]);
-                $reason = trim($m[2]);
-            } elseif (preg_match('/(?:my\s+name\s+is|i\s+am|i\'m)\s+([a-zA-Z\s]+?)(?:,|\.|\sand\s|\smy\s+reason\s+is|\sreason\s+is|\sfor\s|\sto\s)(.+)/i', $questionText, $m)) {
-                $name = trim($m[1]);
-                $reason = trim($m[2]);
-            } else {
-                $parts = explode(' ', trim($questionText), 2);
-                $name = trim($parts[0]);
-                $reason = isset($parts[1]) ? trim($parts[1]) : 'Medical enquiry';
+            // Check labeled formats: Name: ..., Reason: ...
+            if (preg_match('/(?:name\s*[:=\-]\s*)([^,\n;]+)/i', $textWithoutEmail, $nm)) {
+                $name = trim($nm[1]);
+            }
+            if (preg_match('/(?:reason\s*[:=\-]\s*)(.+)$/is', $textWithoutEmail, $rm)) {
+                $reason = trim($rm[1]);
+            }
+
+            if (empty($name) || empty($reason)) {
+                if (preg_match('/^(?:my\s+name\s+is|i\s+am|i\'m)\s+([a-zA-Z\s]+?)(?:,|\.|\sand\s|\smy\s+reason\s+is|\sreason\s+is|\sfor\s|\sto\s)(.+)/is', $textWithoutEmail, $m)) {
+                    if (empty($name)) $name = trim($m[1]);
+                    if (empty($reason)) $reason = trim($m[2]);
+                } elseif (preg_match('/^([^,:\-\n;]+)[,:\-]\s*(.+)$/is', $textWithoutEmail, $m)) {
+                    if (empty($name)) $name = trim($m[1]);
+                    if (empty($reason)) $reason = trim($m[2]);
+                } else {
+                    $parts = preg_split('/\s+/', $textWithoutEmail, 2);
+                    if (empty($name)) $name = trim($parts[0] ?? '');
+                    if (empty($reason)) $reason = isset($parts[1]) ? trim($parts[1]) : 'Support enquiry';
+                }
             }
 
             $name = preg_replace('/^(my\s+name\s+is|i\s+am|i\'m)\s+/i', '', $name);
-            $reason = preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason:)\s*/i', '', $reason);
+            $reason = preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason\s*[:=\-]?)\s*/i', '', $reason);
+
+            // If user omitted email, prompt them politely
+            if (empty($email)) {
+                return [
+                    'question_id' => (string) Str::uuid(),
+                    'answer_text' => "Thank you! Could you please also provide your **Email address** so our team can follow up with you and connect you with a live agent?",
+                    'answer_status' => 'answered',
+                    'sources' => [],
+                ];
+            }
+
+            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
 
             if (empty($name)) {
-                $name = 'Patient';
+                $name = 'Valued Customer';
             }
             if (empty($reason)) {
-                $reason = 'Medical enquiry';
+                $reason = 'General enquiry';
             }
 
-            $prefilledText = "Hello, my name is {$name}. I would like to speak with a patient coordinator regarding: {$reason}.";
+            $prefilledText = "Hello {$org->name}, my name is {$name}" . ($email ? " ({$email})" : "") . ". I would like to speak with an agent regarding: {$reason}.";
             $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
                 ?: (config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1')) . '?text=' . rawurlencode($prefilledText));
 
             $convId = $conversation ? $conversation->id : '';
             $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+            $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
             $safeReason = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
             $safeNameAttr = addslashes($safeName);
+            $safeEmailAttr = addslashes($safeEmail);
             $safeReasonAttr = addslashes($safeReason);
 
-            $replyText = "Thank you, {$name}! I have noted your reason: {$reason}.\n\nHow would you like to connect with our team?\n\n" .
-                "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
+            $replyText = "Thank you, {$name}! I have noted your details:\n" .
+                ($email ? "• **Email:** {$email}\n" : "") .
+                "• **Reason:** {$reason}\n\n" .
+                "How would you like to connect with our team?\n\n" .
+                "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-email=\"{$safeEmailAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
                 "  <a href=\"{$whatsappUrlWithText}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
                 "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
                 "    <span>Connect on WhatsApp</span>\n" .
                 "  </a>\n" .
-                "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '{$safeReasonAttr}', '{$convId}')\">\n" .
+                "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-email=\"{$safeEmailAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '{$safeEmailAttr}', '{$safeReasonAttr}', '{$convId}')\">\n" .
                 "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
                 "    <span>Chat with Live Agent</span>\n" .
                 "  </button>\n" .
                 "</div>";
+
+            // If conversation exists, record user details in conversation metadata
+            if ($conversation) {
+                $conversation->update([
+                    'metadata' => array_merge($conversation->metadata ?? [], [
+                        'customer_name' => $name,
+                        'customer_email' => $email,
+                        'reason' => $reason,
+                    ]),
+                ]);
+            }
 
             $dummyUser = User::where('organization_id', $org->id)->first();
             $question = Question::create([
@@ -555,7 +607,7 @@ class WidgetChatController extends Controller
 
             return [
                 'question_id' => $question->id,
-                'answer_text' => $cached['answer_text'] . " (served from memory cache ⚡)",
+                'answer_text' => $cached['answer_text'],
                 'answer_status' => $cached['answer_status'],
                 'sources' => $cached['sources'] ?? [],
             ];
@@ -570,11 +622,16 @@ class WidgetChatController extends Controller
         $isGreeting = (bool) preg_match('/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|hola)(\s*|[!?.].*)$/i', $cleanQuery);
         $isHelpQuery = (bool) preg_match('/^(how\s+can\s+you\s+help(\s+me)?|what\s+can\s+you\s+do|who\s+are\s+you|help\s*me?)(\s*|[!?.].*)$/i', $cleanQuery);
 
+        $welcomeMessage = trim($settings?->welcome_message ?? '');
         if ($isGreeting || $isHelpQuery) {
             if ($isGreeting) {
-                $replyText = "Hello! I am {$assistantName}, the virtual assistant for {$org->name}. " .
-                    ($orgDetails ? "{$orgDetails} " : "") .
-                    "How can I assist you today?";
+                if (!empty($welcomeMessage)) {
+                    $replyText = $welcomeMessage;
+                } else {
+                    $replyText = "Hello! I am {$assistantName}, the virtual assistant for {$org->name}. " .
+                        ($orgDetails ? "{$orgDetails} " : "") .
+                        "How can I assist you today?";
+                }
             } else {
                 $replyText = "I am {$assistantName}, the dedicated AI assistant for {$org->name}. " .
                     ($orgDetails ? "{$orgDetails} " : "") .

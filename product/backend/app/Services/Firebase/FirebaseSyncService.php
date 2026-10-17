@@ -504,11 +504,12 @@ class FirebaseSyncService
     /**
      * Hit Cloud Firestore and Firebase Realtime Database to trigger Live Agent escalation.
      */
-    public function escalateToLiveAgent(string $orgId, string $conversationId, string $customerName, string $reason): bool
+    public function escalateToLiveAgent(string $orgId, string $conversationId, string $customerName, string $reason, string $customerEmail = ""): bool
     {
         $now = now()->toIso8601String();
         $cleanCid = preg_replace('/[^a-zA-Z0-9_-]/', '', $conversationId);
-        $messageText = "Live Agent requested by {$customerName}. Reason: {$reason}";
+        $emailPart = !empty($customerEmail) ? " ({$customerEmail})" : "";
+        $messageText = "Live Agent requested by {$customerName}{$emailPart}. Reason: {$reason}";
 
         // 1. Write message to Cloud Firestore
         try {
@@ -523,6 +524,7 @@ class FirebaseSyncService
                         'message_type' => ['stringValue' => 'human_request'],
                         'content' => ['stringValue' => $messageText],
                         'reason' => ['stringValue' => $reason],
+                        'customer_email' => ['stringValue' => $customerEmail],
                         'status' => ['stringValue' => 'pending'],
                         'created_at' => ['stringValue' => $now],
                     ]
@@ -543,6 +545,7 @@ class FirebaseSyncService
                         'conversation_id' => $cleanCid,
                         'organization_id' => $orgId,
                         'customer_name' => $customerName,
+                        'customer_email' => $customerEmail,
                         'mode' => 'human_pending',
                         'status' => 'waiting',
                         'last_message_preview' => $messageText,
