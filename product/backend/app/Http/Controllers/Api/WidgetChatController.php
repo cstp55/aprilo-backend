@@ -259,6 +259,15 @@ class WidgetChatController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // If conversation is already assigned to human agent or awaiting human, do NOT generate AI response
+        if ($conv && in_array($conv->mode, ['human', 'human_pending'])) {
+            return response()->json([
+                'success' => true,
+                'mode' => $conv->mode,
+                'reply' => null,
+            ]);
+        }
+
         $settings = $organization->settings;
         if ($settings && (!($settings->is_widget_enabled ?? true) || $settings->assistant_status === 'paused')) {
             $offlineText = 'Chatbot is currently offline or disabled for this organization. Please reach out via our official contact channels.';
@@ -524,6 +533,16 @@ class WidgetChatController extends Controller
      */
     private function processQueryForOrg(Organization $org, string $questionText, ?WidgetConversation $conversation = null, ?Request $request = null): array
     {
+        // When assigned to human agent, AI remains completely silent
+        if ($conversation && in_array($conversation->mode, ['human', 'human_pending'])) {
+            return [
+                'question_id' => (string) Str::uuid(),
+                'answer_text' => '',
+                'answer_status' => 'human_mode',
+                'sources' => [],
+            ];
+        }
+
         $cleanQuery = strtolower(trim($questionText));
 
         // 1. Live Agent Mandatory 3-Field Escalation Handshake (Name, Email, Reason)
@@ -542,8 +561,8 @@ class WidgetChatController extends Controller
             }
         }
 
-        $isAgentRequest = (bool) preg_match('/\b(connect(\s+to)?\s+agent|talk\s+to\s+(a\s+)?(human|agent|coordinator|specialist|person|representative)|speak\s+with\s+(a\s+)?(human|agent|coordinator|specialist|representative)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(agent|human))\b/i', $cleanQuery)
-            || in_array($cleanQuery, ['agent', 'connect to agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human', 'human support']);
+        $isAgentRequest = (bool) preg_match('/\b(connect(\s+(with|to))?\s+agent|talk\s+(with|to)\s+(a\s+)?(human|agent|coordinator|specialist|person|representative)|speak\s+(with|to)\s+(a\s+)?(human|agent|coordinator|specialist|representative)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(with\s+)?(agent|human)|connect\s+agent|live\s+support)\b/i', $cleanQuery)
+            || in_array($cleanQuery, ['agent', 'connect to agent', 'connect with agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human', 'human support']);
 
         if ($isAgentRequest && !$isAwaitingInfo) {
             \Illuminate\Support\Facades\Cache::put($handshakeKey, true, 900); // 15 mins
@@ -596,26 +615,14 @@ class WidgetChatController extends Controller
                     if (empty($name)) $name = trim($m[1]);
                     if (empty($reason)) $reason = trim($m[2]);
                 } else {
-                    $parts = preg_split('/\s+/', $textWithoutEmail, 2);
-                    if (empty($name)) $name = trim($parts[0] ?? '');
-                    if (empty($reason)) $reason = isset($parts[1]) ? trim($parts[1]) : 'Support enquiry';
+                    $words = preg_split('/\s+/', $textWithoutEmail, 2);
+                    if (empty($name)) $name = trim($words[0] ?? '');
+                    if (empty($reason)) $reason = isset($words[1]) && trim($words[1]) !== '' ? trim($words[1]) : 'Support enquiry';
                 }
             }
 
-            $name = preg_replace('/^(my\s+name\s+is|i\s+am|i\'m)\s+/i', '', $name);
-            $reason = preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason\s*[:=\-]?)\s*/i', '', $reason);
-
-            // If user omitted email, prompt them politely
-            if (empty($email)) {
-                return [
-                    'question_id' => (string) Str::uuid(),
-                    'answer_text' => "Thank you! Could you please also provide your **Email address** so our team can follow up with you and connect you with a live agent?",
-                    'answer_status' => 'answered',
-                    'sources' => [],
-                ];
-            }
-
-            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
+            $name = trim(preg_replace('/^(my\s+name\s+is|i\s+am|i\'m)\s+/i', '', $name));
+            $reason = trim(preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason\s*[:=\-]?)\s*/i', '', $reason));
 
             if (empty($name)) {
                 $name = 'Valued Customer';
@@ -623,6 +630,8 @@ class WidgetChatController extends Controller
             if (empty($reason)) {
                 $reason = 'General enquiry';
             }
+
+            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
 
             $prefilledText = "Hello {$org->name}, my name is {$name}" . ($email ? " ({$email})" : "") . ". I would like to speak with an agent regarding: {$reason}.";
             $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
@@ -653,13 +662,15 @@ class WidgetChatController extends Controller
 
             // If conversation exists, record user details in conversation metadata
             if ($conversation) {
-                $conversation->update([
-                    'metadata' => array_merge($conversation->metadata ?? [], [
-                        'customer_name' => $name,
-                        'customer_email' => $email,
-                        'reason' => $reason,
-                    ]),
-                ]);
+                try {
+                    $conversation->update([
+                        'metadata' => array_merge($conversation->metadata ?? [], [
+                            'customer_name' => $name,
+                            'customer_email' => $email,
+                            'reason' => $reason,
+                        ]),
+                    ]);
+                } catch (\Throwable $e) {}
             }
 
             $dummyUser = User::where('organization_id', $org->id)->first();
