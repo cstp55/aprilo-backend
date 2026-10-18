@@ -322,7 +322,7 @@ class GeminiAiProvider implements AiProviderInterface
 
         // 1. Live human / agent / coordinator request
         if (preg_match('/\b(human|agent|coordinator|specialist|person|representative|support team|connect to agent|talk to human)\b/i', $lower)) {
-            return "To connect you with our live support team, could you please provide your **Name**, **Email address**, and **Reason** for reaching out?";
+            return "To connect you with our live support team, could you please provide your **Name**?";
         }
 
         // 2. Greetings
@@ -368,10 +368,7 @@ class GeminiAiProvider implements AiProviderInterface
 
         // 4. Services / Offerings inquiry
         if (str_contains($lower, 'service') || str_contains($lower, 'what do you do') || str_contains($lower, 'offer') || str_contains($lower, 'about')) {
-            if (!empty($orgContext)) {
-                return "At {$orgName}, here is how we can assist you:\n\n{$orgContext}\n\nHow can we help you today?";
-            }
-            return "At {$orgName}, we provide professional solutions and services. How may I assist your inquiry today?";
+            return "At {$orgName}, we assist international patients and their families explore medical treatment options in India by coordinating access to hospitals, doctors, medical opinions, treatment estimates, and related patient support services.\n\nHow may I help you today?";
         }
 
         // 5. Contact / WhatsApp inquiry
@@ -385,10 +382,6 @@ class GeminiAiProvider implements AiProviderInterface
         }
 
         // 6. Default organization-aware fallback
-        if (!empty($orgContext)) {
-            return "Welcome to {$orgName}.\n\n{$orgContext}\n\nHow may I help you today? You can ask about our services, policies, or request to speak with our support team.";
-        }
-
-        return "Welcome to {$orgName}. I am {$assistantName}, your assistant. How may I help you with our services today? You can ask a question or request to speak with a live agent.";
+        return "Welcome to {$orgName}. I am {$assistantName}, your dedicated assistant. How may I help you today? You can ask about our services, medical opinions, hospital coordination, or request to speak with a human patient coordinator.";
     }
 }

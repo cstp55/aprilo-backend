@@ -41,6 +41,8 @@ class WidgetChatController extends Controller
 
         $isWidgetEnabled = (bool) ($settings?->is_widget_enabled ?? true);
         $isOnline = $isWidgetEnabled && ($settings?->assistant_status ?? 'active') === 'active';
+        $chatbotIcon = $settings?->chatbot_icon ?: 'star';
+        $avatarUrl = filter_var($chatbotIcon, FILTER_VALIDATE_URL) ? $chatbotIcon : '';
 
         return response()->json([
             'success' => true,
@@ -48,7 +50,8 @@ class WidgetChatController extends Controller
                 'id' => $settings?->ensureWidgetPublicKey(),
                 'name' => $assistantName,
                 'display_name' => $assistantName,
-                'avatar_url' => '',
+                'icon' => $chatbotIcon,
+                'avatar_url' => $avatarUrl,
                 'welcome_message' => $welcomeMessage,
                 'offline_message' => 'Chat support is currently offline or unavailable.',
                 'position' => 'bottom-right',
@@ -61,6 +64,7 @@ class WidgetChatController extends Controller
                 'background_color' => '#f8fafc',
                 'text_color' => '#1f2937',
                 'border_radius' => '16px',
+                'icon' => $chatbotIcon,
             ],
             'behavior' => [
                 'auto_open' => false,
@@ -196,7 +200,7 @@ class WidgetChatController extends Controller
         ], 201);
     }
 
-    public function createConversationMessage(Request $request, $conversation): JsonResponse
+    public function createConversationMessage(Request $request, $conversation_id = null): JsonResponse
     {
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:2000'],
@@ -206,12 +210,13 @@ class WidgetChatController extends Controller
 
         $this->ensureWidgetTablesExist();
 
+        $conversationParam = $conversation_id ?: $request->route('conversation_id') ?: $request->route('conversation') ?: $request->input('conversation_id');
         $conv = null;
-        if ($conversation instanceof WidgetConversation) {
-            $conv = $conversation;
-        } elseif (is_string($conversation)) {
+        if ($conversationParam instanceof WidgetConversation) {
+            $conv = $conversationParam;
+        } elseif (is_string($conversationParam)) {
             try {
-                $conv = WidgetConversation::find($conversation);
+                $conv = WidgetConversation::find($conversationParam);
             } catch (\Throwable $e) {}
         }
 
@@ -234,10 +239,10 @@ class WidgetChatController extends Controller
             }
 
             try {
-                $convId = is_string($conversation) && Str::isUuid($conversation) ? $conversation : (string) Str::uuid();
+                $convId = is_string($conversationParam) && Str::isUuid($conversationParam) ? $conversationParam : (string) Str::uuid();
                 $conv = WidgetConversation::create([
                     'id' => $convId,
-                    'organization_id' => $organization->id,
+                    'organization_id' => $organization?->id,
                     'customer_id' => (string) Str::uuid(),
                     'session_id' => $request->input('session_id') ?? ('sess_' . time()),
                     'mode' => 'ai',
@@ -284,6 +289,15 @@ class WidgetChatController extends Controller
         }
 
         $result = $this->processQueryForOrg($organization, $validated['message'], $conv, $request);
+
+        // If conversation is in human mode or answer is empty/human_mode, stay silent
+        if (($conv && in_array($conv->mode, ['human', 'human_pending'])) || ($result['answer_status'] ?? '') === 'human_mode' || empty($result['answer_text'])) {
+            return response()->json([
+                'success' => true,
+                'mode' => $conv?->mode ?? 'human_pending',
+                'reply' => null,
+            ]);
+        }
 
         $replyId = (string) Str::uuid();
         try {
@@ -483,17 +497,31 @@ class WidgetChatController extends Controller
             'conversation_id' => ['required', 'string', 'max:120'],
             'customer_name' => ['required', 'string', 'max:120'],
             'customer_email' => ['nullable', 'string', 'max:120'],
-            'reason' => ['required', 'string', 'max:2000'],
+            'reason' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $org = $this->resolveOrg($request);
         $cleanCid = $validated['conversation_id'];
         $customerName = trim($validated['customer_name']);
         $customerEmail = trim($validated['customer_email'] ?? '');
-        $reason = trim($validated['reason']);
+        $reason = trim($validated['reason'] ?? '') ?: 'Support enquiry';
 
-        // Update local database conversation if it exists
+        // Update local database conversation or create if not found
         $conv = WidgetConversation::where('id', $cleanCid)->where('organization_id', $org->id)->first();
+        if (!$conv) {
+            try {
+                $conv = WidgetConversation::create([
+                    'id' => Str::isUuid($cleanCid) ? $cleanCid : (string) Str::uuid(),
+                    'organization_id' => $org->id,
+                    'customer_id' => (string) Str::uuid(),
+                    'session_id' => $request->input('session_id') ?? ('sess_' . time()),
+                    'mode' => 'human_pending',
+                    'status' => 'open',
+                ]);
+            } catch (\Throwable $e) {}
+        } else {
+            $conv->update(['mode' => 'human_pending']);
+        }
         if ($conv) {
             $conv->update(['mode' => 'human_pending']);
             $emailSnippet = $customerEmail ? " ({$customerEmail})" : "";
@@ -545,29 +573,47 @@ class WidgetChatController extends Controller
 
         $cleanQuery = strtolower(trim($questionText));
 
-        // 1. Live Agent Mandatory 3-Field Escalation Handshake (Name, Email, Reason)
-        $sessionToken = $conversation ? $conversation->id : ($request?->input('session_id') ?? $request?->ip() ?? 'guest');
-        $handshakeKey = 'agent_handshake:' . $org->id . ':' . $sessionToken;
-        $isAwaitingInfo = (bool) \Illuminate\Support\Facades\Cache::get($handshakeKey, false);
+        // 1. Live Agent Escalation Handshake: First Ask Name -> Then Ask Reason -> Then Show WhatsApp & Live Agent Buttons
+        $sessionToken = $request?->input('session_id') ?? ($conversation ? $conversation->session_id : null) ?? $conversation?->id ?? $request?->ip() ?? 'guest';
+        $handshakeKey = 'agent_handshake_state:' . $org->id . ':' . $sessionToken;
+        $handshakeState = \Illuminate\Support\Facades\Cache::get($handshakeKey);
 
-        if (!$isAwaitingInfo && $conversation) {
-            $lastAssistantMsg = $conversation->messages()->where('sender_type', 'assistant')->latest()->first();
-            if ($lastAssistantMsg && (
-                str_contains($lastAssistantMsg->content, 'Name, Email') ||
-                str_contains($lastAssistantMsg->content, 'name, email') ||
-                str_contains($lastAssistantMsg->content, 'provide your name and reason')
-            )) {
-                $isAwaitingInfo = true;
+        $isAgentRequest = (bool) preg_match('/\b(connect(\s+(with|to))?\s+(an?\s+)?agent|talk\s+(with|to)\s+(an?\s+)?(human|agent|coordinator|specialist|person|representative)|speak\s+(with|to)\s+(an?\s+)?(human|agent|coordinator|specialist|representative)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(with\s+)?(agent|human)|connect\s+agent|live\s+support|need\s+agent|want\s+agent|live\s+chat|agent)\b/i', $cleanQuery)
+            || in_array($cleanQuery, ['agent', 'connect to agent', 'connect with agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human', 'human support', 'live chat']);
+
+        // Helper function to extract name and reason if both provided in one message
+        $extractNameAndReason = function(string $rawText) {
+            $name = '';
+            $reason = '';
+            if (preg_match('/(?:name\s*[:=\-]\s*)([^,\n;]+)/i', $rawText, $nm)) {
+                $name = trim($nm[1]);
             }
-        }
+            if (preg_match('/(?:reason\s*[:=\-]\s*)(.+)$/is', $rawText, $rm)) {
+                $reason = trim($rm[1]);
+            }
+            if (empty($name) || empty($reason)) {
+                if (preg_match('/^(?:my\s+name\s+is|i\s+am|i\'m)\s+([a-zA-Z\s]+?)(?:,|\.|\sand\s|\smy\s+reason\s+is|\sreason\s+is|\sfor\s|\sto\s)(.+)/is', $rawText, $m)) {
+                    if (empty($name)) $name = trim($m[1]);
+                    if (empty($reason)) $reason = trim($m[2]);
+                } elseif (preg_match('/^([^,:\-\n;]+)[,:\-]\s*(.+)$/is', $rawText, $m)) {
+                    if (empty($name)) $name = trim($m[1]);
+                    if (empty($reason)) $reason = trim($m[2]);
+                }
+            }
+            return [$name, $reason];
+        };
 
-        $isAgentRequest = (bool) preg_match('/\b(connect(\s+(with|to))?\s+agent|talk\s+(with|to)\s+(a\s+)?(human|agent|coordinator|specialist|person|representative)|speak\s+(with|to)\s+(a\s+)?(human|agent|coordinator|specialist|representative)|human\s+agent|live\s+agent|real\s+person|patient\s+coordinator|human\s+support|talk\s+to\s+someone|contact\s+(with\s+)?(agent|human)|connect\s+agent|live\s+support)\b/i', $cleanQuery)
-            || in_array($cleanQuery, ['agent', 'connect to agent', 'connect with agent', 'human', 'live agent', 'coordinator', 'talk to agent', 'talk to human', 'human support']);
+        // If no active handshake, but user requests an agent:
+        if ($isAgentRequest && !$handshakeState) {
+            [$name, $reason] = $extractNameAndReason($questionText);
+            if (!empty($name) && !empty($reason)) {
+                return $this->buildLiveAgentButtonsResponse($org, $conversation, $questionText, $name, $reason);
+            }
 
-        if ($isAgentRequest && !$isAwaitingInfo) {
-            \Illuminate\Support\Facades\Cache::put($handshakeKey, true, 900); // 15 mins
+            // Step 1: Prompt for Name
+            \Illuminate\Support\Facades\Cache::put($handshakeKey, ['step' => 'awaiting_name'], 900);
 
-            $replyText = "To connect you with our live support team, could you please provide your **Name**, **Email address**, and **Reason** for reaching out?";
+            $replyText = "To connect you with our live support team, could you please provide your **Name**?";
             $dummyUser = User::where('organization_id', $org->id)->first();
             $question = Question::create([
                 'organization_id' => $org->id,
@@ -586,109 +632,58 @@ class WidgetChatController extends Controller
             ];
         }
 
-        if ($isAwaitingInfo) {
-            // Extract Email if provided
-            $email = '';
-            if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $questionText, $emailMatches)) {
-                $email = trim($emailMatches[0]);
-            }
+        // If handshake is active:
+        if ($handshakeState && is_array($handshakeState)) {
+            $step = $handshakeState['step'] ?? '';
 
-            // Remove email from text to parse name and reason
-            $textWithoutEmail = trim(str_replace($email, '', $questionText));
-
-            $name = '';
-            $reason = '';
-
-            // Check labeled formats: Name: ..., Reason: ...
-            if (preg_match('/(?:name\s*[:=\-]\s*)([^,\n;]+)/i', $textWithoutEmail, $nm)) {
-                $name = trim($nm[1]);
-            }
-            if (preg_match('/(?:reason\s*[:=\-]\s*)(.+)$/is', $textWithoutEmail, $rm)) {
-                $reason = trim($rm[1]);
-            }
-
-            if (empty($name) || empty($reason)) {
-                if (preg_match('/^(?:my\s+name\s+is|i\s+am|i\'m)\s+([a-zA-Z\s]+?)(?:,|\.|\sand\s|\smy\s+reason\s+is|\sreason\s+is|\sfor\s|\sto\s)(.+)/is', $textWithoutEmail, $m)) {
-                    if (empty($name)) $name = trim($m[1]);
-                    if (empty($reason)) $reason = trim($m[2]);
-                } elseif (preg_match('/^([^,:\-\n;]+)[,:\-]\s*(.+)$/is', $textWithoutEmail, $m)) {
-                    if (empty($name)) $name = trim($m[1]);
-                    if (empty($reason)) $reason = trim($m[2]);
-                } else {
-                    $words = preg_split('/\s+/', $textWithoutEmail, 2);
-                    if (empty($name)) $name = trim($words[0] ?? '');
-                    if (empty($reason)) $reason = isset($words[1]) && trim($words[1]) !== '' ? trim($words[1]) : 'Support enquiry';
+            if ($step === 'awaiting_name') {
+                [$name, $reason] = $extractNameAndReason($questionText);
+                if (!empty($name) && !empty($reason)) {
+                    \Illuminate\Support\Facades\Cache::forget($handshakeKey);
+                    return $this->buildLiveAgentButtonsResponse($org, $conversation, $questionText, $name, $reason);
                 }
+
+                $cleanName = trim(preg_replace('/^(my\s+name\s+is|i\s+am|i\'m|this\s+is|name\s*[:=\-]?)\s*/i', '', $questionText));
+                $cleanName = trim(preg_replace('/[.,;!]+$/', '', $cleanName));
+                if (empty($cleanName)) {
+                    $cleanName = 'Valued Customer';
+                }
+
+                // Step 2: Save Name and prompt for Reason
+                \Illuminate\Support\Facades\Cache::put($handshakeKey, [
+                    'step' => 'awaiting_reason',
+                    'name' => $cleanName,
+                ], 900);
+
+                $replyText = "Thank you, {$cleanName}! What is the **reason** for reaching out so we can connect you with the right specialist?";
+                $dummyUser = User::where('organization_id', $org->id)->first();
+                $question = Question::create([
+                    'organization_id' => $org->id,
+                    'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
+                    'question_text' => $questionText,
+                    'topic' => 'agent_escalation_name',
+                    'sensitivity_status' => 'normal',
+                    'status' => 'answered',
+                ]);
+
+                return [
+                    'question_id' => $question->id,
+                    'answer_text' => $replyText,
+                    'answer_status' => 'answered',
+                    'sources' => [],
+                ];
             }
 
-            $name = trim(preg_replace('/^(my\s+name\s+is|i\s+am|i\'m)\s+/i', '', $name));
-            $reason = trim(preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason\s*[:=\-]?)\s*/i', '', $reason));
+            if ($step === 'awaiting_reason') {
+                $name = $handshakeState['name'] ?? 'Valued Customer';
+                $reason = trim(preg_replace('/^(the\s+reason\s+is|my\s+reason\s+is|reason\s+is|reason\s*[:=\-]?)\s*/i', '', $questionText));
+                if (empty($reason)) {
+                    $reason = 'General enquiry';
+                }
 
-            if (empty($name)) {
-                $name = 'Valued Customer';
+                \Illuminate\Support\Facades\Cache::forget($handshakeKey);
+                return $this->buildLiveAgentButtonsResponse($org, $conversation, $questionText, $name, $reason);
             }
-            if (empty($reason)) {
-                $reason = 'General enquiry';
-            }
-
-            \Illuminate\Support\Facades\Cache::forget($handshakeKey);
-
-            $prefilledText = "Hello {$org->name}, my name is {$name}" . ($email ? " ({$email})" : "") . ". I would like to speak with an agent regarding: {$reason}.";
-            $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
-                ?: (config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1')) . '?text=' . rawurlencode($prefilledText));
-
-            $convId = $conversation ? $conversation->id : '';
-            $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
-            $safeEmail = htmlspecialchars($email, ENT_QUOTES, 'UTF-8');
-            $safeReason = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
-            $safeNameAttr = addslashes($safeName);
-            $safeEmailAttr = addslashes($safeEmail);
-            $safeReasonAttr = addslashes($safeReason);
-
-            $replyText = "Thank you, {$name}! I have noted your details:\n" .
-                ($email ? "• **Email:** {$email}\n" : "") .
-                "• **Reason:** {$reason}\n\n" .
-                "How would you like to connect with our team?\n\n" .
-                "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-email=\"{$safeEmailAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
-                "  <a href=\"{$whatsappUrlWithText}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
-                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
-                "    <span>Connect on WhatsApp</span>\n" .
-                "  </a>\n" .
-                "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-email=\"{$safeEmailAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '{$safeEmailAttr}', '{$safeReasonAttr}', '{$convId}')\">\n" .
-                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
-                "    <span>Chat with Live Agent</span>\n" .
-                "  </button>\n" .
-                "</div>";
-
-            // If conversation exists, record user details in conversation metadata
-            if ($conversation) {
-                try {
-                    $conversation->update([
-                        'metadata' => array_merge($conversation->metadata ?? [], [
-                            'customer_name' => $name,
-                            'customer_email' => $email,
-                            'reason' => $reason,
-                        ]),
-                    ]);
-                } catch (\Throwable $e) {}
-            }
-
-            $dummyUser = User::where('organization_id', $org->id)->first();
-            $question = Question::create([
-                'organization_id' => $org->id,
-                'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
-                'question_text' => $questionText,
-                'topic' => 'agent_escalation_details',
-                'sensitivity_status' => 'normal',
-                'status' => 'answered',
-            ]);
-
-            return [
-                'question_id' => $question->id,
-                'answer_text' => $replyText,
-                'answer_status' => 'answered',
-                'sources' => [],
-            ];
         }
 
         $cacheKey = 'widget_chat_cache:' . $org->id . ':' . md5(strtolower(trim($questionText)));
@@ -714,10 +709,9 @@ class WidgetChatController extends Controller
             ];
         }
 
-        // 2. Organization Conversational Greeting & Introduction handling
+        // 2. Organization Conversational Greeting & Introduction handling (Clean greeting, no raw metadata dumping)
         $settings = $org->settings;
         $assistantName = $settings?->assistant_name ?: ($org->name . ' Assistant');
-        $orgDetails = trim($settings?->organization_details ?? '');
 
         $cleanQuery = strtolower(trim($questionText));
         $isGreeting = (bool) preg_match('/^(hi|hello|hey|greetings|good\s+(morning|afternoon|evening)|hola)(\s*|[!?.].*)$/i', $cleanQuery);
@@ -729,14 +723,10 @@ class WidgetChatController extends Controller
                 if (!empty($welcomeMessage)) {
                     $replyText = $welcomeMessage;
                 } else {
-                    $replyText = "Hello! I am {$assistantName}, the virtual assistant for {$org->name}. " .
-                        ($orgDetails ? "{$orgDetails} " : "") .
-                        "How can I assist you today?";
+                    $replyText = "Hello! I am {$assistantName}, the virtual assistant for {$org->name}. How can I assist you today?";
                 }
             } else {
-                $replyText = "I am {$assistantName}, the dedicated AI assistant for {$org->name}. " .
-                    ($orgDetails ? "{$orgDetails} " : "") .
-                    "I can answer questions regarding our services, operating policies, and assist you with support requests. How may I help you today?";
+                $replyText = "I am {$assistantName}, the dedicated AI assistant for {$org->name}. I can answer questions regarding our services, operating policies, and assist you with support requests. How may I help you today?";
             }
 
             $dummyUser = User::where('organization_id', $org->id)->first();
@@ -1041,4 +1031,70 @@ class WidgetChatController extends Controller
         }
         return rtrim($excerpt, '.') . '.';
     }
+
+    private function buildLiveAgentButtonsResponse(Organization $org, ?WidgetConversation $conversation, string $questionText, string $name, string $reason): array
+    {
+        $name = trim(preg_replace('/^(connect(\s+(with|to))?\s+(an?\s+)?agent[.,;!\s]*|talk\s+(with|to)\s+(an?\s+)?agent[.,;!\s]*|my\s+name\s+is|i\s+am|i\'m|this\s+is|name\s*[:=\-]?)\s*/i', '', $name));
+        $name = trim(preg_replace('/^(my\s+name\s+is|i\s+am|i\'m|this\s+is|name\s*[:=\-]?)\s*/i', '', $name));
+        $name = trim(preg_replace('/[.,;!]+$/', '', $name));
+        if (empty($name)) {
+            $name = 'Valued Customer';
+        }
+        if (empty($reason)) {
+            $reason = 'General enquiry';
+        }
+
+        $prefilledText = "Hello {$org->name}, my name is {$name}. I would like to speak with an agent regarding: {$reason}.";
+        $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
+            ?: (config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1')) . '?text=' . rawurlencode($prefilledText));
+
+        $convId = $conversation ? $conversation->id : '';
+        $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
+        $safeReason = htmlspecialchars($reason, ENT_QUOTES, 'UTF-8');
+        $safeNameAttr = addslashes($safeName);
+        $safeReasonAttr = addslashes($safeReason);
+
+        $replyText = "Thank you, {$name}! I have noted your details:\n" .
+            "• **Reason:** {$reason}\n\n" .
+            "How would you like to connect with our team?\n\n" .
+            "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
+            "  <a href=\"{$whatsappUrlWithText}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
+            "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
+            "    <span>Connect on WhatsApp</span>\n" .
+            "  </a>\n" .
+            "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '', '{$safeReasonAttr}', '{$convId}')\">\n" .
+            "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
+            "    <span>Chat with Live Agent</span>\n" .
+            "  </button>\n" .
+            "</div>";
+
+        if ($conversation) {
+            try {
+                $conversation->update([
+                    'metadata' => array_merge($conversation->metadata ?? [], [
+                        'customer_name' => $name,
+                        'reason' => $reason,
+                    ]),
+                ]);
+            } catch (\Throwable $e) {}
+        }
+
+        $dummyUser = User::where('organization_id', $org->id)->first();
+        $question = Question::create([
+            'organization_id' => $org->id,
+            'user_id' => $dummyUser ? $dummyUser->id : Str::uuid(),
+            'question_text' => $questionText,
+            'topic' => 'agent_escalation_details',
+            'sensitivity_status' => 'normal',
+            'status' => 'answered',
+        ]);
+
+        return [
+            'question_id' => $question->id,
+            'answer_text' => $replyText,
+            'answer_status' => 'answered',
+            'sources' => [],
+        ];
+    }
+
 }
