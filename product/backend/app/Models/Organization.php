@@ -198,12 +198,14 @@ class Organization extends Model
     }
 
     public function supportsLiveChatAgents(): bool
-
     {
         $settings = $this->settings;
 
         return ($settings?->live_chat_enabled ?? true)
-            && $this->hasEntitlement('support.agents');
+            && ($this->hasEntitlement('support.agents')
+                || $this->agentSupports()->where('is_active', true)->exists()
+                || $this->hasActiveProductCategory('ai_support')
+                || $this->hasActiveProductCategory('chatbot'));
     }
 
     private function featureValue(array $features, string $feature): bool

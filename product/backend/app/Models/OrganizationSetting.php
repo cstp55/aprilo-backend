@@ -87,11 +87,18 @@ class OrganizationSetting extends Model
         'billing_mode',
         'usage_queries_count',
         'usage_amount_due',
+
+        // Lead capture & primary question
+        'enable_lead_capture',
+        'lead_capture_prompt',
+        'lead_capture_fields',
+        'lead_notification_email',
     ];
 
     protected function casts(): array
     {
         return [
+            'enable_lead_capture' => 'boolean',
             'live_chat_enabled' => 'boolean',
             'is_widget_enabled' => 'boolean',
             'total_tokens_used' => 'integer',

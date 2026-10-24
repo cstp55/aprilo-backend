@@ -39,10 +39,18 @@ class WidgetChatController extends Controller
         $assistantName = $settings?->assistant_name ?: ($organization->name . ' Assistant');
         $welcomeMessage = $settings?->welcome_message ?: ("Hello! Welcome to " . $organization->name . ". How can we assist you today?");
 
+        $activeAgents = $organization->agentSupports()->with('user')->where('is_active', true)->get();
+        $primaryAgent = $activeAgents->firstWhere('availability_status', 'online') ?? $activeAgents->first();
+        $hasActiveAgents = $activeAgents->isNotEmpty();
+        $hasOnlineAgents = $activeAgents->where('availability_status', 'online')->isNotEmpty();
+
         $isWidgetEnabled = (bool) ($settings?->is_widget_enabled ?? true);
         $isOnline = $isWidgetEnabled && ($settings?->assistant_status ?? 'active') === 'active';
         $chatbotIcon = $settings?->chatbot_icon ?: 'star';
         $avatarUrl = filter_var($chatbotIcon, FILTER_VALIDATE_URL) ? $chatbotIcon : '';
+
+        $humanSupportEnabled = (bool) ($settings?->live_chat_enabled ?? true)
+            && ($hasActiveAgents || $organization->supportsLiveChatAgents());
 
         return response()->json([
             'success' => true,
@@ -70,16 +78,26 @@ class WidgetChatController extends Controller
                 'auto_open' => false,
                 'show_launcher' => $isWidgetEnabled,
                 'show_branding' => true,
-                'human_support_enabled' => (bool) ($settings?->live_chat_enabled ?? true),
+                'human_support_enabled' => $humanSupportEnabled,
+                'live_agent_available' => $hasActiveAgents,
             ],
+            'agent' => $primaryAgent ? [
+                'id' => $primaryAgent->id,
+                'name' => $primaryAgent->nickname ?: ($primaryAgent->user?->name ?? 'Support Agent'),
+                'nickname' => $primaryAgent->nickname,
+                'availability_status' => $primaryAgent->availability_status,
+                'is_online' => $primaryAgent->availability_status === 'online',
+            ] : null,
             'ai' => [
                 'enabled' => $isWidgetEnabled,
+                'agent_id' => $primaryAgent?->id ?? 'ai_assistant',
                 'display_name' => $assistantName,
             ],
             'support' => [
                 'enabled' => $isWidgetEnabled,
                 'business_hours_enabled' => false,
-                'is_online' => $isOnline,
+                'is_online' => $isOnline && ($hasOnlineAgents || $hasActiveAgents),
+                'live_agent_available' => $hasActiveAgents,
             ],
             'quick_actions' => [
                 [
@@ -105,6 +123,11 @@ class WidgetChatController extends Controller
                 'whatsapp_number' => $settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone,
                 'whatsapp_url' => $settings?->getWhatsAppDirectUrl(),
             ],
+            'lead_capture' => [
+                'enabled' => (bool) ($settings?->enable_lead_capture ?? false),
+                'prompt' => $settings?->lead_capture_prompt ?: 'Before we continue, could you please share your Name, Email, and Phone number so our team can follow up with your enquiry?',
+                'fields' => $settings?->lead_capture_fields ?: 'name,email,phone',
+            ],
             'firebase' => [
                 'apiKey' => env('FIREBASE_API_KEY', 'AIzaSyDU5Ce2X5w35sZH81e5nX9i41xXj6YXoMg'),
                 'databaseURL' => env('FIREBASE_DATABASE_URL', 'https://aprilo-infotech-default-rtdb.firebaseio.com'),
@@ -115,7 +138,7 @@ class WidgetChatController extends Controller
         ]);
     }
 
-        private function ensureWidgetTablesExist(): void
+    private function ensureWidgetTablesExist(): void
     {
         try {
             if (!\Illuminate\Support\Facades\Schema::hasTable('widget_conversations')) {
@@ -129,8 +152,23 @@ class WidgetChatController extends Controller
                     $table->string('page_title')->nullable();
                     $table->string('mode')->default('ai');
                     $table->string('status')->default('open')->index();
+                    $table->uuid('assigned_agent_id')->nullable()->index();
+                    $table->string('assigned_agent_name', 120)->nullable();
+                    $table->json('metadata')->nullable();
                     $table->timestamps();
                     $table->index(['organization_id', 'created_at']);
+                });
+            } else {
+                \Illuminate\Support\Facades\Schema::table('widget_conversations', function (\Illuminate\Database\Schema\Blueprint $table): void {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'assigned_agent_id')) {
+                        $table->uuid('assigned_agent_id')->nullable()->index();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'assigned_agent_name')) {
+                        $table->string('assigned_agent_name', 120)->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'metadata')) {
+                        $table->json('metadata')->nullable();
+                    }
                 });
             }
 
@@ -174,6 +212,10 @@ class WidgetChatController extends Controller
         $customerId = (string) Str::uuid();
         $convId = (string) Str::uuid();
 
+        $activeAgent = $organization->agentSupports()->with('user')->where('is_active', true)->first();
+        $assignedAgentId = $activeAgent?->id;
+        $assignedAgentName = $activeAgent?->nickname ?: ($activeAgent?->user?->name);
+
         try {
             $this->ensureWidgetTablesExist();
             $conversation = WidgetConversation::create([
@@ -186,6 +228,8 @@ class WidgetChatController extends Controller
                 'page_title' => $validated['page_title'] ?? null,
                 'mode' => 'ai',
                 'status' => 'open',
+                'assigned_agent_id' => $assignedAgentId,
+                'assigned_agent_name' => $assignedAgentName,
             ]);
             $convId = $conversation->id;
         } catch (\Throwable $e) {
@@ -197,6 +241,8 @@ class WidgetChatController extends Controller
             'conversation_id' => $convId,
             'customer_id' => $customerId,
             'mode' => 'ai',
+            'assigned_agent_id' => $assignedAgentId,
+            'assigned_agent_name' => $assignedAgentName,
         ], 201);
     }
 
@@ -230,23 +276,31 @@ class WidgetChatController extends Controller
 
             $organization = null;
             if ($widgetKey) {
-                $setting = \App\Models\OrganizationSetting::where('public_widget_key', $widgetKey)->first();
-                $organization = $setting?->organization;
+                if ($widgetKey === 'pk_live_aprilo' || $widgetKey === 'pk_live_default') {
+                    $organization = Organization::where('name', 'like', '%Aprilo%')->first();
+                } else {
+                    $setting = \App\Models\OrganizationSetting::where('public_widget_key', $widgetKey)->first();
+                    $organization = $setting?->organization;
+                }
             }
 
-            if (!$organization) {
-                $organization = Organization::where('status', 'active')->first();
-            }
+            abort_unless($organization, 400, 'Invalid or missing widget key for conversation.');
+
+            $activeAgent = $organization->agentSupports()->with('user')->where('is_active', true)->first();
+            $assignedAgentId = $activeAgent?->id;
+            $assignedAgentName = $activeAgent?->nickname ?: ($activeAgent?->user?->name);
 
             try {
                 $convId = is_string($conversationParam) && Str::isUuid($conversationParam) ? $conversationParam : (string) Str::uuid();
                 $conv = WidgetConversation::create([
                     'id' => $convId,
-                    'organization_id' => $organization?->id,
+                    'organization_id' => $organization->id,
                     'customer_id' => (string) Str::uuid(),
                     'session_id' => $request->input('session_id') ?? ('sess_' . time()),
                     'mode' => 'ai',
                     'status' => 'open',
+                    'assigned_agent_id' => $assignedAgentId,
+                    'assigned_agent_name' => $assignedAgentName,
                 ]);
             } catch (\Throwable $e) {}
         }
@@ -264,8 +318,15 @@ class WidgetChatController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // If conversation is already assigned to human agent or awaiting human, do NOT generate AI response
+        // If conversation is already assigned to human agent or awaiting human, sync message to RTDB and do NOT generate AI response
         if ($conv && in_array($conv->mode, ['human', 'human_pending'])) {
+            $this->firebaseSyncService->pushUserMessageToRealtime(
+                (string) $organization->id,
+                $conv->id,
+                $validated['message'],
+                $conv->customer_name ?? 'Website Visitor'
+            );
+
             return response()->json([
                 'success' => true,
                 'mode' => $conv->mode,
@@ -288,7 +349,111 @@ class WidgetChatController extends Controller
             ]);
         }
 
+        $enableLeadCapture = (bool) ($settings?->enable_lead_capture ?? false);
+        $leadCaptured = (bool) ($conv?->lead_captured ?? ($conv?->metadata['lead_captured'] ?? false));
+        $leadPromptPending = (bool) ($conv?->metadata['lead_prompt_pending'] ?? false);
+        $userText = trim($validated['message']);
+
+        // Check if message provides contact info
+        $extractedEmail = null;
+        if (preg_match('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', $userText, $mEmail)) {
+            $extractedEmail = $mEmail[0];
+        }
+
+        $extractedPhone = null;
+        if (preg_match('/(?:\+?\d{1,4}[ -]?)?(?:\(?\d{2,5}\)?[ -]?)?\d{3,5}[ -]?\d{3,5}/', $userText, $mPhone)) {
+            $digits = preg_replace('/\D/', '', $mPhone[0]);
+            if (strlen($digits) >= 7) {
+                $extractedPhone = trim($mPhone[0]);
+            }
+        }
+
+        $extractedName = null;
+        if (preg_match('/(?:my name is|i am|i\'m|name\s*[:=\-]?)\s*([a-zA-Z\s]+)/i', $userText, $mName)) {
+            $extractedName = trim($mName[1]);
+        }
+
+        // If lead capture is active and user provided contact details
+        $hasContactInfo = ($extractedEmail || $extractedPhone || ($leadPromptPending && !empty($extractedName)));
+        if ($enableLeadCapture && !$leadCaptured && $hasContactInfo && $conv) {
+            $finalName = $extractedName ?: ($conv->customer_name ?: 'Valued Customer');
+            $conv->update([
+                'customer_name' => $finalName,
+                'customer_email' => $extractedEmail ?: $conv->customer_email,
+                'customer_phone' => $extractedPhone ?: $conv->customer_phone,
+                'lead_captured' => true,
+                'lead_captured_at' => now(),
+                'metadata' => array_merge($conv->metadata ?? [], [
+                    'lead_captured' => true,
+                    'lead_prompt_pending' => false,
+                    'customer_name' => $finalName,
+                    'customer_email' => $extractedEmail ?: $conv->customer_email,
+                    'customer_phone' => $extractedPhone ?: $conv->customer_phone,
+                ]),
+            ]);
+
+            $this->sendLeadNotificationEmail($organization, $conv, $userText);
+            $leadCaptured = true;
+
+            // Determine if the message only provided contact details or also asked a separate question
+            $cleaned = preg_replace('/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/', '', $userText);
+            $cleaned = preg_replace('/(?:\+?\d{1,4}[ -]?)?(?:\(?\d{2,5}\)?[ -]?)?\d{3,5}[ -]?\d{3,5}/', '', $cleaned);
+            $cleaned = preg_replace('/(?:my\s+name\s+is|i\s+am|i\'m|name\s*[:=\-]?|my\s+email\s+is|email\s*[:=\-]?|my\s+phone\s+is|phone\s*[:=\-]?|mobile\s*[:=\-]?|number\s*[:=\-]?|contact\s*[:=\-]?|and|is|here|my|please|reach\s+me\s+at)/i', '', $cleaned);
+            $cleaned = trim(preg_replace('/[^a-zA-Z0-9\s]/', '', $cleaned));
+            $remainingWords = array_filter(explode(' ', $cleaned), fn($w) => strlen(trim($w)) > 2);
+
+            $hasSeparateQuestion = false;
+            foreach ($remainingWords as $word) {
+                if (in_array(strtolower($word), ['how', 'what', 'when', 'where', 'why', 'who', 'can', 'cost', 'price', 'hospital', 'doctor', 'treatment', 'surgery', 'visa', 'flight', 'estimate'])) {
+                    $hasSeparateQuestion = true;
+                    break;
+                }
+            }
+
+            if (!$hasSeparateQuestion) {
+                $ackText = "Thank you, {$finalName}! Your contact details have been successfully received and our patient coordination team has been notified. We will reach out to you shortly.\n\nIn the meantime, what medical treatment or questions can we help you explore?";
+                $replyId = (string) Str::uuid();
+                $conv->messages()->create([
+                    'sender_type' => 'assistant',
+                    'message_type' => 'text',
+                    'content' => $ackText,
+                    'sender_name' => $organization->settings?->assistant_name ?: ($organization->name . ' Assistant'),
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'mode' => 'ai',
+                    'reply' => [
+                        'id' => $replyId,
+                        'sender' => 'assistant',
+                        'content' => $ackText,
+                        'sender_name' => $organization->settings?->assistant_name ?: ($organization->name . ' Assistant'),
+                        'timestamp' => now()->toIso8601String(),
+                    ],
+                ]);
+            }
+        }
+
         $result = $this->processQueryForOrg($organization, $validated['message'], $conv, $request);
+
+        // If lead was just captured in this message with a question, prepend a polite acknowledgment
+        if ($enableLeadCapture && $leadCaptured && $hasContactInfo) {
+            $finalName = $conv->customer_name ?: 'Valued Customer';
+            $result['answer_text'] = "Thank you, {$finalName}! Your contact details have been recorded for our team.\n\n" . $result['answer_text'];
+        }
+
+        // If lead capture is active and lead not captured yet, append primary intake question
+        if ($enableLeadCapture && !$leadCaptured && $conv && empty($conv->metadata['lead_prompt_pending'])) {
+            $defaultPrompt = "Before we continue, could you please share your **Name**, **Email**, and **Phone number** so our coordination team can assist you with your enquiry?";
+            $intakePrompt = $settings->lead_capture_prompt ?: $defaultPrompt;
+            $result['answer_text'] = rtrim($result['answer_text']) . "\n\n" . $intakePrompt;
+
+            $conv->update([
+                'metadata' => array_merge($conv->metadata ?? [], [
+                    'lead_prompt_pending' => true,
+                ]),
+            ]);
+        }
 
         // If conversation is in human mode or answer is empty/human_mode, stay silent
         if (($conv && in_array($conv->mode, ['human', 'human_pending'])) || ($result['answer_status'] ?? '') === 'human_mode' || empty($result['answer_text'])) {
@@ -506,6 +671,11 @@ class WidgetChatController extends Controller
         $customerEmail = trim($validated['customer_email'] ?? '');
         $reason = trim($validated['reason'] ?? '') ?: 'Support enquiry';
 
+        $activeAgents = $org->agentSupports()->with('user')->where('is_active', true)->get();
+        $targetAgent = $activeAgents->firstWhere('availability_status', 'online') ?? $activeAgents->first();
+        $assignedAgentId = $targetAgent?->id;
+        $assignedAgentName = $targetAgent?->nickname ?: ($targetAgent?->user?->name ?? 'Support Agent');
+
         // Update local database conversation or create if not found
         $conv = WidgetConversation::where('id', $cleanCid)->where('organization_id', $org->id)->first();
         if (!$conv) {
@@ -517,13 +687,18 @@ class WidgetChatController extends Controller
                     'session_id' => $request->input('session_id') ?? ('sess_' . time()),
                     'mode' => 'human_pending',
                     'status' => 'open',
+                    'assigned_agent_id' => $assignedAgentId,
+                    'assigned_agent_name' => $assignedAgentName,
                 ]);
             } catch (\Throwable $e) {}
         } else {
-            $conv->update(['mode' => 'human_pending']);
+            $conv->update([
+                'mode' => 'human_pending',
+                'assigned_agent_id' => $assignedAgentId,
+                'assigned_agent_name' => $assignedAgentName,
+            ]);
         }
         if ($conv) {
-            $conv->update(['mode' => 'human_pending']);
             $emailSnippet = $customerEmail ? " ({$customerEmail})" : "";
             $conv->messages()->create([
                 'sender_type' => 'user',
@@ -535,6 +710,8 @@ class WidgetChatController extends Controller
                     'customer_email' => $customerEmail,
                     'reason' => $reason,
                     'status' => 'pending',
+                    'assigned_agent_id' => $assignedAgentId,
+                    'assigned_agent_name' => $assignedAgentName,
                 ],
             ]);
         }
@@ -544,7 +721,9 @@ class WidgetChatController extends Controller
             $cleanCid,
             $customerName,
             $reason,
-            $customerEmail
+            $customerEmail,
+            $assignedAgentId,
+            $assignedAgentName
         );
 
         return response()->json([
@@ -552,6 +731,8 @@ class WidgetChatController extends Controller
             'message' => 'Escalated to live agent successfully.',
             'mode' => 'human_pending',
             'conversation_id' => $cleanCid,
+            'assigned_agent_id' => $assignedAgentId,
+            'assigned_agent_name' => $assignedAgentName,
             'firestore_and_rtdb_synced' => $synced,
         ]);
     }
@@ -1045,8 +1226,10 @@ class WidgetChatController extends Controller
         }
 
         $prefilledText = "Hello {$org->name}, my name is {$name}. I would like to speak with an agent regarding: {$reason}.";
-        $whatsappUrlWithText = $org->settings?->getWhatsAppDirectUrl($prefilledText)
-            ?: (config('services.whatsapp.direct_link', env('WHATSAPP_DIRECT_LINK', 'https://wa.me/message/BE3K4RAO24GXK1')) . '?text=' . rawurlencode($prefilledText));
+        $whatsappUrl = $org->settings?->getWhatsAppDirectUrl($prefilledText);
+
+        $hasActiveAgents = $org->agentSupports()->where('is_active', true)->exists();
+        $liveAgentAvailable = $hasActiveAgents || $org->supportsLiveChatAgents();
 
         $convId = $conversation ? $conversation->id : '';
         $safeName = htmlspecialchars($name, ENT_QUOTES, 'UTF-8');
@@ -1054,19 +1237,33 @@ class WidgetChatController extends Controller
         $safeNameAttr = addslashes($safeName);
         $safeReasonAttr = addslashes($safeReason);
 
-        $replyText = "Thank you, {$name}! I have noted your details:\n" .
-            "• **Reason:** {$reason}\n\n" .
-            "How would you like to connect with our team?\n\n" .
-            "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
-            "  <a href=\"{$whatsappUrlWithText}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
-            "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
-            "    <span>Connect on WhatsApp</span>\n" .
-            "  </a>\n" .
-            "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '', '{$safeReasonAttr}', '{$convId}')\">\n" .
-            "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
-            "    <span>Chat with Live Agent</span>\n" .
-            "  </button>\n" .
-            "</div>";
+        $buttonsHtml = '';
+        if ($whatsappUrl) {
+            $buttonsHtml .= "  <a href=\"{$whatsappUrl}\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"aprilo-btn aprilo-btn-whatsapp\" id=\"live-whatsapp-btn\">\n" .
+                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"currentColor\" style=\"flex-shrink:0;\"><path d=\"M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z\"/></svg>\n" .
+                "    <span>Connect on WhatsApp</span>\n" .
+                "  </a>\n";
+        }
+
+        if ($liveAgentAvailable) {
+            $buttonsHtml .= "  <button type=\"button\" class=\"aprilo-btn aprilo-btn-liveagent\" id=\"live-agent-btn\" data-action=\"live-agent\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\" onclick=\"window.ApriloConnectLiveAgent && window.ApriloConnectLiveAgent('{$safeNameAttr}', '', '{$safeReasonAttr}', '{$convId}')\">\n" .
+                "    <svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"flex-shrink:0;\"><path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\"></path></svg>\n" .
+                "    <span>Chat with Live Agent</span>\n" .
+                "  </button>\n";
+        }
+
+        if (!empty($buttonsHtml)) {
+            $replyText = "Thank you, {$name}! I have noted your details:\n" .
+                "• **Reason:** {$reason}\n\n" .
+                "How would you like to connect with our team?\n\n" .
+                "<div class=\"aprilo-action-buttons\" data-name=\"{$safeNameAttr}\" data-reason=\"{$safeReasonAttr}\">\n" .
+                $buttonsHtml .
+                "</div>";
+        } else {
+            $replyText = "Thank you, {$name}! I have noted your details:\n" .
+                "• **Reason:** {$reason}\n\n" .
+                "Our support team has been notified and will reach out to you shortly.";
+        }
 
         if ($conversation) {
             try {
@@ -1097,4 +1294,36 @@ class WidgetChatController extends Controller
         ];
     }
 
+    private function sendLeadNotificationEmail(Organization $org, WidgetConversation $conv, string $currentMessage): void
+    {
+        $settings = $org->settings;
+        $recipient = $settings?->lead_notification_email
+            ?: $settings?->hr_desk_email
+            ?: $org->users()->first()?->email;
+
+        if (!$recipient) {
+            return;
+        }
+
+        $customerName = $conv->customer_name ?: 'Website Visitor';
+        $customerEmail = $conv->customer_email ?: '';
+        $customerPhone = $conv->customer_phone ?: '';
+        $pageTitle = $conv->page_title ?: 'Website Chat';
+        $pageUrl = $conv->page_url ?: '';
+
+        try {
+            Mail::to($recipient)->send(new \App\Mail\NewLeadCapturedMail(
+                $org->name,
+                $customerName,
+                $customerEmail,
+                $customerPhone,
+                $currentMessage,
+                $pageUrl,
+                $pageTitle,
+                $conv->id
+            ));
+        } catch (\Throwable $e) {
+            Log::warning("Lead notification email failed: " . $e->getMessage());
+        }
+    }
 }

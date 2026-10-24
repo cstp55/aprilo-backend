@@ -198,11 +198,16 @@ class SuperAdminController extends Controller
             'restriction_template' => ['nullable', Rule::in(['general_faq', 'strict_retrieval', 'hr_policy', 'custom'])],
             'eligibility_criteria' => ['nullable', 'string', 'max:5000'],
             'strict_context_enforcement' => ['nullable', 'boolean'],
+            'enable_lead_capture' => ['nullable', 'boolean'],
+            'lead_capture_prompt' => ['nullable', 'string', 'max:2000'],
+            'lead_capture_fields' => ['nullable', 'string', 'max:255'],
+            'lead_notification_email' => ['nullable', 'email', 'max:255'],
         ]);
 
         $validated['live_chat_enabled'] = $request->boolean('live_chat_enabled');
         $validated['is_widget_enabled'] = $request->boolean('is_widget_enabled');
         $validated['strict_context_enforcement'] = $request->boolean('strict_context_enforcement');
+        $validated['enable_lead_capture'] = $request->boolean('enable_lead_capture');
 
         // Dynamically filter only columns that physically exist in the database table
         $columnsToSave = array_filter(
@@ -212,6 +217,13 @@ class SuperAdminController extends Controller
         );
 
         $settings->update($columnsToSave);
+
+        // Sync settings fields into Knowledge Base / Vector DB chunks
+        try {
+            app(\App\Services\Knowledge\KnowledgeSyncService::class)->syncSettingsToKnowledgeBase($settings);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('KnowledgeSyncService error: ' . $e->getMessage());
+        }
 
         AuditEvent::create([
             'organization_id' => $organization->id,

@@ -163,6 +163,32 @@
                     </label>
                 </div>
 
+                <!-- 2.5 Lead Intake & Primary Question -->
+                <div style="margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                        <div>
+                            <h2 style="font-size: 17px; margin: 0;">Lead Intake & Primary Question</h2>
+                            <p class="help" style="margin: 3px 0 0;">Ask customers for their contact information (Name, Email, Phone) and receive instant email lead alerts.</p>
+                        </div>
+                        <span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 12px; background: #dbeafe; color: #1e40af;">Lead Capture</span>
+                    </div>
+
+                    <label style="display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 14px;">
+                        <input type="checkbox" name="enable_lead_capture" value="1" @checked(old('enable_lead_capture', $settings->enable_lead_capture ?? false))>
+                        Enable Primary Question (Collect customer Name, Email & Phone before continuing query)
+                    </label>
+
+                    <label class="field" style="margin-bottom: 14px;">Primary question prompt
+                        <textarea name="lead_capture_prompt" rows="2" style="width: 100%; font-size: 13px; resize: vertical;" placeholder="Before we continue, could you please share your Name, Email, and Phone number so our coordination team can assist you with your enquiry?">{{ old('lead_capture_prompt', $settings->lead_capture_prompt) }}</textarea>
+                        <span class="help" style="font-size: 11.5px; margin-top: 4px;">The intake prompt presented to website visitors to capture contact details.</span>
+                    </label>
+
+                    <label class="field">Lead notification email
+                        <input name="lead_notification_email" type="email" value="{{ old('lead_notification_email', $settings->lead_notification_email ?: ($settings->hr_desk_email ?: '')) }}" placeholder="e.g. leads@{{ strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $organization->name)) }}.com">
+                        <span class="help" style="font-size: 11.5px; margin-top: 4px;">Email address to instantly receive newly captured customer leads (Subject: New Lead Captured).</span>
+                    </label>
+                </div>
+
                 <!-- 3. AI Role & Limitations -->
                 <div style="margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">

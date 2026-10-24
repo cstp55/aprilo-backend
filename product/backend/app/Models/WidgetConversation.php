@@ -15,16 +15,35 @@ class WidgetConversation extends Model
         'organization_id',
         'customer_id',
         'session_id',
+        'customer_name',
+        'customer_email',
+        'customer_phone',
+        'lead_captured',
+        'lead_captured_at',
         'domain',
         'page_url',
         'page_title',
         'mode',
         'status',
+        'assigned_agent_id',
+        'assigned_agent_name',
+        'metadata',
+    ];
+
+    protected $casts = [
+        'metadata' => 'array',
+        'lead_captured' => 'boolean',
+        'lead_captured_at' => 'datetime',
     ];
 
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);
+    }
+
+    public function assignedAgent(): BelongsTo
+    {
+        return $this->belongsTo(AgentSupport::class, 'assigned_agent_id');
     }
 
     public function messages(): HasMany

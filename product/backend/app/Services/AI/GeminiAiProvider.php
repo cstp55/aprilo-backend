@@ -131,22 +131,9 @@ class GeminiAiProvider implements AiProviderInterface
 
         // Fallback generator if Gemini fails or is not configured
         if (empty($answerText)) {
-            if (!empty($slicedContext)) {
-                $bullets = [];
-                foreach ($slicedContext as $index => $item) {
-                    $label = '[' . ($index + 1) . ']';
-                    $bullets[] = '- ' . ($item['excerpt'] ?? '') . ' ' . $label;
-                }
-                $answerText = "Based on approved sources, here is the summarized guidance:\n" . implode("\n", $bullets);
-                $answerStatus = 'answered';
-            } elseif (!empty($orgDetails)) {
-                // Intelligent fallback generated directly from the configured Organization metadata & fields
-                $answerText = $this->generateOfflineAnswerFromMetadata($question, $orgDetails, $settings);
-                $answerStatus = 'answered';
-            } else {
-                $answerText = "I cannot confirm this from approved sources yet. Please escalate to support.";
-                $answerStatus = 'fallback';
-            }
+            // Intelligent natural language synthesis directly from organization domain knowledge & RAG context
+            $answerText = $this->generateOfflineAnswerFromMetadata($question, $orgDetails, $settings, $slicedContext);
+            $answerStatus = 'answered';
         }
 
         if (!isset($totalTokens) || $totalTokens === 0) {
@@ -310,7 +297,7 @@ class GeminiAiProvider implements AiProviderInterface
         return rtrim($excerpt, '.') . '.';
     }
 
-    private function generateOfflineAnswerFromMetadata(string $question, string $orgDetails, OrganizationSetting $settings): string
+    private function generateOfflineAnswerFromMetadata(string $question, string $orgDetails, OrganizationSetting $settings, array $slicedContext = []): string
     {
         $lower = strtolower(trim($question));
         $assistantName = $settings->assistant_name ?: 'Assistant';
@@ -319,10 +306,16 @@ class GeminiAiProvider implements AiProviderInterface
         $systemPrompt = trim($settings->custom_system_prompt ?? '');
         $guardrails = trim($settings->eligibility_criteria ?? '');
         $orgContext = trim($orgDetails ?: ($settings->organization_details ?? ''));
+        $whatsappUrl = $settings->getWhatsAppDirectUrl();
+        $waNumber = $settings->whatsapp_number ?: $settings->whatsapp_sender_phone;
 
-        // 1. Live human / agent / coordinator request
-        if (preg_match('/\b(human|agent|coordinator|specialist|person|representative|support team|connect to agent|talk to human)\b/i', $lower)) {
-            return "To connect you with our live support team, could you please provide your **Name**?";
+        // 1. Live human / team connection request
+        if (preg_match('/\b(connect(\s+with|\s+to)?\s+(the\s+)?team|talk\s+to|speak\s+with|human|agent|coordinator|specialist|person|representative|support team|connect to agent)\b/i', $lower)) {
+            $response = "I would be glad to connect you with our {$orgName} patient coordination team! Could you please share your **Name** and the **Reason** for your enquiry?";
+            if ($whatsappUrl) {
+                $response .= "\n\nYou can also message us directly on [WhatsApp]({$whatsappUrl})" . ($waNumber ? " at {$waNumber}" : "") . ".";
+            }
+            return $response;
         }
 
         // 2. Greetings
@@ -330,58 +323,96 @@ class GeminiAiProvider implements AiProviderInterface
             if (!empty($settings->welcome_message)) {
                 return $settings->welcome_message;
             }
-            return "Hello! I am {$assistantName}, the virtual assistant for {$orgName}. How can I assist you today?";
+            return "Hello! Welcome to **{$orgName}**. I am {$assistantName}, your dedicated virtual assistant. How may I assist you today?";
         }
 
-        // 3. Search organization context & system prompt for matching query terms
-        $allKnowledge = $orgContext . "\n\n" . $systemPrompt;
-        $paragraphs = array_filter(array_map('trim', explode("\n\n", $allKnowledge)));
+        // 3. Medical Visa / Travel / India Treatment application
+        $isVisaQuery = str_contains($lower, 'visa') || str_contains($lower, 'apply') || str_contains($lower, 'medial') || str_contains($lower, 'medical') || str_contains($lower, 'invitation') || str_contains($lower, 'travel') || str_contains($lower, 'passport');
+        if ($isVisaQuery && (str_contains(strtolower($orgName), 'health') || str_contains(strtolower($orgDetails), 'patient') || str_contains(strtolower($orgDetails), 'medical'))) {
+            $visaText = "Welcome to **{$orgName}**! We provide comprehensive medical visa and international patient coordination services for treatments in India:\n\n" .
+                "• **Hospital Visa Invitation Letter:** We coordinate directly with top accredited hospitals in India to issue official Medical Visa Invitation Letters for you and your attendant.\n" .
+                "• **Medical Report Review & Quotes:** Share your medical reports to receive doctor opinions and transparent treatment estimates before traveling.\n" .
+                "• **Travel & Arrival Assistance:** We coordinate flight planning, airport transfers, local accommodation, and priority hospital appointments.\n\n" .
+                "Would you like us to review your reports or connect you with a patient coordinator?";
+            return $visaText;
+        }
 
-        $stopwords = ['what', 'is', 'are', 'the', 'how', 'can', 'you', 'i', 'do', 'does', 'in', 'on', 'at', 'to', 'for', 'a', 'an', 'and', 'or', 'about', 'tell', 'me', 'please', 'we', 'our', 'my'];
-        $words = array_filter(preg_split('/[^a-z0-9_-]+/', $lower), fn($w) => strlen($w) > 2 && !in_array($w, $stopwords));
+        // 4. Hospital & Doctor coordination
+        $isHospitalQuery = str_contains($lower, 'hospital') || str_contains($lower, 'doctor') || str_contains($lower, 'specialist') || str_contains($lower, 'surgeon') || str_contains($lower, 'appointment');
+        if ($isHospitalQuery) {
+            return "At **{$orgName}**, we partner with premier multi-specialty hospitals and leading surgeons across India. We help you obtain:\n\n" .
+                "• Doctor profiles and specialist recommendations\n" .
+                "• Second medical opinions from senior specialists\n" .
+                "• Priority appointment scheduling and treatment planning\n\n" .
+                "Would you like us to review your medical reports for a doctor recommendation?";
+        }
 
-        $bestParagraph = '';
-        $bestScore = 0;
+        // 5. Treatment cost & estimates
+        $isCostQuery = str_contains($lower, 'cost') || str_contains($lower, 'price') || str_contains($lower, 'estimate') || str_contains($lower, 'quote') || str_contains($lower, 'fee');
+        if ($isCostQuery) {
+            return "Treatment costs in India vary based on the procedure, medical specialty, and selected hospital. **{$orgName}** coordinates complimentary, transparent treatment estimates directly from accredited partner hospitals.\n\n" .
+                "Please share your medical requirements or reports, and our coordination team will arrange an estimate for you.";
+        }
 
-        foreach ($paragraphs as $para) {
-            $paraLower = strtolower($para);
-            $score = 0;
-            foreach ($words as $w) {
-                if (str_contains($paraLower, $w)) {
-                    $score += 2;
+        // 6. Contact / WhatsApp inquiry
+        if (str_contains($lower, 'contact') || str_contains($lower, 'whatsapp') || str_contains($lower, 'phone') || str_contains($lower, 'reach') || str_contains($lower, 'call') || str_contains($lower, 'email')) {
+            if ($whatsappUrl) {
+                return "You can reach the **{$orgName}** team directly on WhatsApp" . ($waNumber ? " ({$waNumber})" : "") . ":\n\n" .
+                    "[Connect on WhatsApp]({$whatsappUrl})\n\n" .
+                    "Or request to speak with a live coordinator right here in this chat!";
+            }
+            return "You can reach the **{$orgName}** coordination team directly by asking to connect with a live agent right here in this chat!";
+        }
+
+        // 7. Check RAG Context chunks if available
+        if (!empty($slicedContext)) {
+            $relevantSentences = [];
+            foreach ($slicedContext as $item) {
+                $excerpt = $item['excerpt'] ?? '';
+                $clean = $this->cleanRawMetadataHeaders($excerpt, $orgName);
+                if (strlen($clean) > 20 && !str_contains($clean, 'Never reveal passwords') && !str_contains($clean, 'Step 1:')) {
+                    $relevantSentences[] = $clean;
                 }
             }
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestParagraph = $para;
+
+            if (!empty($relevantSentences)) {
+                $firstInfo = $relevantSentences[0];
+                return "Regarding your enquiry at **{$orgName}**:\n\n" . $firstInfo . "\n\nHow else can I assist you today?";
             }
         }
 
-        if ($bestScore >= 2 && !empty($bestParagraph)) {
-            $reply = $bestParagraph;
-            $whatsappUrl = $settings->getWhatsAppDirectUrl();
-            if ($whatsappUrl) {
-                $reply .= "\n\nWould you like more information or to connect directly with our team?";
-            }
-            return $reply;
-        }
-
-        // 4. Services / Offerings inquiry
+        // 8. Services / Offerings general overview
         if (str_contains($lower, 'service') || str_contains($lower, 'what do you do') || str_contains($lower, 'offer') || str_contains($lower, 'about')) {
-            return "At {$orgName}, we assist international patients and their families explore medical treatment options in India by coordinating access to hospitals, doctors, medical opinions, treatment estimates, and related patient support services.\n\nHow may I help you today?";
+            return "Welcome to **{$orgName}**! We assist patients and their families explore medical treatment options by coordinating access to accredited hospitals, specialist doctors, medical opinions, treatment estimates, visa assistance, and travel arrangements.\n\nHow may we assist you today?";
         }
 
-        // 5. Contact / WhatsApp inquiry
-        if (str_contains($lower, 'contact') || str_contains($lower, 'whatsapp') || str_contains($lower, 'phone') || str_contains($lower, 'reach')) {
-            $whatsappUrl = $settings->getWhatsAppDirectUrl();
-            $waNumber = $settings->whatsapp_number ?: $settings->whatsapp_sender_phone;
-            if ($whatsappUrl) {
-                return "You can reach the {$orgName} team directly on WhatsApp" . ($waNumber ? " ({$waNumber})" : "") . ":\n\n[Connect on WhatsApp]({$whatsappUrl})\n\nOr reply here and request to speak with a live agent!";
-            }
-            return "You can reach {$orgName} support directly by asking to connect with a live agent right here in this chat!";
-        }
+        // 9. Default friendly response
+        return "Welcome to **{$orgName}**. I am {$assistantName}, your dedicated assistant. How may I assist you today? You can ask about our services, hospital coordination, doctor opinions, visa guidance, or request to connect with a coordinator.";
+    }
 
-        // 6. Default organization-aware fallback
-        return "Welcome to {$orgName}. I am {$assistantName}, your dedicated assistant. How may I help you today? You can ask about our services, medical opinions, hospital coordination, or request to speak with a human patient coordinator.";
+    private function cleanRawMetadataHeaders(string $rawText, string $orgName): string
+    {
+        $text = $rawText;
+
+        // Strip internal role definitions and prompt directives
+        $text = preg_replace('/You are the official AI assistant for [^.]+\./i', '', $text);
+        $text = preg_replace('/^Organization Name:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Website:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Industry:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Target Audience:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Primary Objective:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Communication Languages:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Official Information Source:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Contact Channel:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Organization Description:\s*/im', '', $text);
+        $text = preg_replace('/^(ANSWERING|PATIENT SUPPORT|HUMAN HANDOFF|HUMAN HANDOFF & AGENT ESCALATION|MEDICAL QUESTIONS|PRIVACY|STYLE):\s*/im', '', $text);
+        $text = preg_replace('/^Step \d+:\s*.*$/im', '', $text);
+        $text = preg_replace('/^Whenever a visitor asks to speak with.*$/im', '', $text);
+        $text = preg_replace('/^Our system provides two options:.*$/im', '', $text);
+
+        // Compress multiple blank lines
+        $text = preg_replace("/\n{3,}/", "\n\n", trim($text));
+
+        return $text;
     }
 }

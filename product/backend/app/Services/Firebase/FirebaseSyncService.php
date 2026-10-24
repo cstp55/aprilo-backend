@@ -422,9 +422,9 @@ class FirebaseSyncService
         try {
             $groupedConvs = [];
             foreach ($conversations as $conv) {
-                $orgId = $conv['organization_id'] ?? '01a0ca0a-90e0-7257-a23c-4d5c723aff99';
+                $orgId = $conv['organization_id'] ?? null;
                 $cid = $conv['id'] ?? null;
-                if (! $cid) {
+                if (! $cid || ! $orgId) {
                     continue;
                 }
 
@@ -502,72 +502,123 @@ class FirebaseSyncService
     }
 
     /**
-     * Hit Cloud Firestore and Firebase Realtime Database to trigger Live Agent escalation.
+     * Hit Cloud Firestore and Firebase Realtime Database to trigger Live Agent escalation for a tenant.
      */
-    public function escalateToLiveAgent(string $orgId, string $conversationId, string $customerName, string $reason, string $customerEmail = ""): bool
-    {
+    public function escalateToLiveAgent(
+        string $orgId,
+        string $conversationId,
+        string $customerName,
+        string $reason,
+        string $customerEmail = "",
+        ?string $assignedAgentId = null,
+        ?string $assignedAgentName = null
+    ): bool {
         $now = now()->toIso8601String();
         $cleanCid = preg_replace('/[^a-zA-Z0-9_-]/', '', $conversationId);
         $emailPart = !empty($customerEmail) ? " ({$customerEmail})" : "";
         $messageText = "Live Agent requested by {$customerName}{$emailPart}. Reason: {$reason}";
 
         // 1. Write message to Cloud Firestore
-        try {
-            Http::withoutVerifying()->timeout(8)->post(
-                "{$this->firestoreBaseUrl}/messages?key={$this->apiKey}",
-                [
-                    'fields' => [
-                        'conversation_id' => ['stringValue' => $cleanCid],
-                        'organization_id' => ['stringValue' => $orgId],
-                        'sender_type' => ['stringValue' => 'user'],
-                        'sender_name' => ['stringValue' => $customerName],
-                        'message_type' => ['stringValue' => 'human_request'],
-                        'content' => ['stringValue' => $messageText],
-                        'reason' => ['stringValue' => $reason],
-                        'customer_email' => ['stringValue' => $customerEmail],
-                        'status' => ['stringValue' => 'pending'],
-                        'created_at' => ['stringValue' => $now],
-                    ]
-                ]
-            );
-        } catch (\Throwable $e) {
-            Log::warning('FirebaseSyncService: Error posting message to Firestore: ' . $e->getMessage());
-        }
-
-        // 2. Write to Firebase Realtime Database
-        if (!empty($this->rtdbBaseUrl)) {
+        if (!empty($this->firestoreBaseUrl) && !empty($this->apiKey)) {
             try {
-                // Update conversation mode to human_pending
-                Http::withoutVerifying()->timeout(8)->patch(
-                    "{$this->rtdbBaseUrl}/tenants/{$orgId}/conversations/{$cleanCid}.json",
+                Http::withoutVerifying()->timeout(8)->post(
+                    "{$this->firestoreBaseUrl}/messages?key={$this->apiKey}",
                     [
-                        'id' => $cleanCid,
-                        'conversation_id' => $cleanCid,
-                        'organization_id' => $orgId,
-                        'customer_name' => $customerName,
-                        'customer_email' => $customerEmail,
-                        'mode' => 'human_pending',
-                        'status' => 'waiting',
-                        'last_message_preview' => $messageText,
-                        'human_requested_at' => $now,
-                        'last_message_at' => $now,
+                        'fields' => [
+                            'conversation_id' => ['stringValue' => $cleanCid],
+                            'organization_id' => ['stringValue' => $orgId],
+                            'sender_type' => ['stringValue' => 'user'],
+                            'sender_name' => ['stringValue' => $customerName],
+                            'message_type' => ['stringValue' => 'human_request'],
+                            'content' => ['stringValue' => $messageText],
+                            'reason' => ['stringValue' => $reason],
+                            'customer_email' => ['stringValue' => $customerEmail],
+                            'status' => ['stringValue' => 'pending'],
+                            'created_at' => ['stringValue' => $now],
+                        ]
                     ]
                 );
 
-                // Push human requested event
+                // Ensure the conversation document exists and is updated in Firestore
+                $convFields = [
+                    'id' => ['stringValue' => $cleanCid],
+                    'conversation_id' => ['stringValue' => $cleanCid],
+                    'organization_id' => ['stringValue' => $orgId],
+                    'customer_name' => ['stringValue' => $customerName],
+                    'customer_email' => ['stringValue' => $customerEmail],
+                    'mode' => ['stringValue' => 'human_pending'],
+                    'status' => ['stringValue' => 'waiting'],
+                    'last_message_preview' => ['stringValue' => $messageText],
+                    'human_requested_at' => ['stringValue' => $now],
+                    'last_message_at' => ['stringValue' => $now],
+                    'updated_at' => ['stringValue' => $now],
+                ];
+                if (!empty($assignedAgentId)) {
+                    $convFields['assigned_agent_id'] = ['stringValue' => $assignedAgentId];
+                }
+                if (!empty($assignedAgentName)) {
+                    $convFields['assigned_agent_name'] = ['stringValue' => $assignedAgentName];
+                }
+
+                Http::withoutVerifying()->timeout(8)->patch(
+                    "{$this->firestoreBaseUrl}/conversations/{$cleanCid}?key={$this->apiKey}",
+                    ['fields' => $convFields]
+                );
+            } catch (\Throwable $e) {
+                Log::warning('FirebaseSyncService: Error updating live agent escalation in Firestore: ' . $e->getMessage());
+            }
+        }
+
+        // 2. Write to Firebase Realtime Database scoped strictly to this tenant organization
+        if (!empty($this->rtdbBaseUrl)) {
+            try {
+                // Update conversation mode to human_pending
+                $convPatch = [
+                    'id' => $cleanCid,
+                    'conversation_id' => $cleanCid,
+                    'organization_id' => $orgId,
+                    'customer_name' => $customerName,
+                    'customer_email' => $customerEmail,
+                    'mode' => 'human_pending',
+                    'status' => 'waiting',
+                    'last_message_preview' => $messageText,
+                    'human_requested_at' => $now,
+                    'last_message_at' => $now,
+                ];
+                if (!empty($assignedAgentId)) {
+                    $convPatch['assigned_agent_id'] = $assignedAgentId;
+                }
+                if (!empty($assignedAgentName)) {
+                    $convPatch['assigned_agent_name'] = $assignedAgentName;
+                }
+
+                Http::withoutVerifying()->timeout(8)->patch(
+                    "{$this->rtdbBaseUrl}/tenants/{$orgId}/conversations/{$cleanCid}.json",
+                    $convPatch
+                );
+
+                // Push human requested event for tenant agent notification
                 $eventId = 'evt_' . $cleanCid;
+                $eventData = [
+                    'id' => $eventId,
+                    'type' => 'HUMAN_REQUESTED',
+                    'event' => 'HUMAN_REQUESTED',
+                    'conversation_id' => $cleanCid,
+                    'customer_name' => $customerName,
+                    'reason' => $reason,
+                    'status' => 'pending',
+                    'created_at' => $now,
+                ];
+                if (!empty($assignedAgentId)) {
+                    $eventData['assigned_agent_id'] = $assignedAgentId;
+                }
+                if (!empty($assignedAgentName)) {
+                    $eventData['assigned_agent_name'] = $assignedAgentName;
+                }
+
                 Http::withoutVerifying()->timeout(5)->patch(
                     "{$this->rtdbBaseUrl}/tenants/{$orgId}/events/{$eventId}.json",
-                    [
-                        'id' => $eventId,
-                        'type' => 'HUMAN_REQUESTED',
-                        'event' => 'HUMAN_REQUESTED',
-                        'conversation_id' => $cleanCid,
-                        'customer_name' => $customerName,
-                        'reason' => $reason,
-                        'status' => 'pending',
-                        'created_at' => $now,
-                    ]
+                    $eventData
                 );
 
                 // Push message to tenant conversation messages thread
@@ -593,6 +644,53 @@ class FirebaseSyncService
         }
 
         return false;
+    }
+
+    /**
+     * Push user message directly to Firebase Realtime Database for active human chats.
+     */
+    public function pushUserMessageToRealtime(
+        string $orgId,
+        string $conversationId,
+        string $message,
+        string $senderName = 'Website Visitor'
+    ): bool {
+        if (empty($this->rtdbBaseUrl)) {
+            return false;
+        }
+
+        $now = now()->toIso8601String();
+        $cleanCid = preg_replace('/[^a-zA-Z0-9_-]/', '', $conversationId);
+        $msgKey = 'msg_' . time() . '_' . substr(md5(uniqid()), 0, 6);
+
+        try {
+            Http::withoutVerifying()->timeout(5)->put(
+                "{$this->rtdbBaseUrl}/tenants/{$orgId}/messages/{$cleanCid}/{$msgKey}.json",
+                [
+                    'id' => $msgKey,
+                    'conversation_id' => $cleanCid,
+                    'sender_type' => 'user',
+                    'sender_name' => $senderName,
+                    'message_type' => 'text',
+                    'content' => $message,
+                    'created_at' => $now,
+                    'status' => 'delivered',
+                ]
+            );
+
+            Http::withoutVerifying()->timeout(5)->patch(
+                "{$this->rtdbBaseUrl}/tenants/{$orgId}/conversations/{$cleanCid}.json",
+                [
+                    'last_message_preview' => $message,
+                    'last_message_at' => $now,
+                ]
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('FirebaseSyncService: Error pushing user message to RTDB: ' . $e->getMessage());
+            return false;
+        }
     }
 }
 
