@@ -56,6 +56,14 @@ class Organization extends Model
         return $this->hasMany(User::class);
     }
 
+    public function owner(): HasOne
+    {
+        return $this->hasOne(User::class)->where(function ($query) {
+            $query->where('role', 'owner')
+                  ->orWhereHas('roleModel', fn ($r) => $r->where('slug', 'owner'));
+        });
+    }
+
     public function agentSupports(): HasMany
     {
         return $this->hasMany(AgentSupport::class);
@@ -138,8 +146,14 @@ class Organization extends Model
             return true;
         }
 
-        if ($category === 'ai_support' || $category === 'chatbot') {
-            if ($this->settings?->is_widget_enabled ?? false) {
+        // Dynamic mode passed with query param takes precedence (e.g., ?mode=ai_support or ?mode=agent)
+        $requestMode = request()?->query('mode') ?? request()?->input('mode');
+        if ($requestMode) {
+            $normMode = strtolower(trim((string) $requestMode));
+            if (($category === 'ai_support' || $category === 'chatbot') && in_array($normMode, ['ai_support', 'ai', 'chatbot'], true)) {
+                return true;
+            }
+            if (($category === 'agent' || $category === 'human_support') && in_array($normMode, ['agent', 'human', 'human_pending'], true)) {
                 return true;
             }
         }
@@ -195,6 +209,23 @@ class Organization extends Model
                     });
             });
         });
+    }
+
+    public function isFreePlan(): bool
+    {
+        $planSlug = strtolower(trim($this->plan ?? 'free'));
+        if (empty($planSlug) || in_array($planSlug, ['free', 'basic', 'starter', 'trial', 'free_tier'], true)) {
+            $hasActivePaid = $this->subscriptions()
+                ->where('status', 'active')
+                ->where(function ($query): void {
+                    $query->whereNull('current_cycle_end')->orWhere('current_cycle_end', '>=', now());
+                })
+                ->exists();
+
+            return ! $hasActivePaid;
+        }
+
+        return false;
     }
 
     public function supportsLiveChatAgents(): bool

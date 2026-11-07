@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\WhatsAppCampaignController;
 use App\Http\Controllers\Admin\AgentSupportController;
 use App\Http\Controllers\Admin\ProductManagementController;
 use App\Http\Controllers\Admin\SupportAdminController;
+use App\Http\Controllers\Admin\InvoiceController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -119,7 +120,13 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::post('/settings/preview', [AdminConsoleController::class, 'previewQuestion'])->name('settings.preview');
         Route::post('/settings/billing', [AdminConsoleController::class, 'updateBillingSettings'])->name('settings.billing.update');
         Route::post('/settings/billing/close-cycle', [AdminConsoleController::class, 'closeBillingCycle'])->name('settings.billing.close-cycle');
-        Route::get('/settings/invoices/{invoice}', [AdminConsoleController::class, 'showInvoice'])->name('settings.invoices.show');
+        
+        // Payments & Invoices (Aprilo Infotech Centralized Billing Engine)
+        Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
+        Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+        Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
+        Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update');
+        Route::get('/settings/invoices/{invoice}', [InvoiceController::class, 'show'])->name('settings.invoices.show');
         Route::get('/settings/connect/{platform}', [AdminConsoleController::class, 'connectPlatform'])->name('settings.connect');
         Route::post('/settings/connect/{platform}', [AdminConsoleController::class, 'updateConnection'])->name('settings.connect.update');
         Route::post('/settings/upgrade', [AdminConsoleController::class, 'upgradePlan'])->name('settings.upgrade');

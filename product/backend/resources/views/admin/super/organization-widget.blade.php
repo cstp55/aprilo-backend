@@ -97,6 +97,28 @@
                         <span id="label-widget-enabled">{{ $isWidgetEnabled ? 'Widget Enabled' : 'Widget Disabled' }}</span>
                     </label>
                 </div>
+
+                <!-- Only WhatsApp Widget Switch (Free / Direct WhatsApp Redirection Mode) -->
+                @php
+                    $isOnlyWhatsApp = (bool) old('only_whatsapp_widget', $settings->only_whatsapp_widget ?? false);
+                @endphp
+                <div style="background: {{ $isOnlyWhatsApp ? '#f0fdf4' : '#f8fafc' }}; border: 1px solid {{ $isOnlyWhatsApp ? '#86efac' : 'var(--line)' }}; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;">
+                    <div style="max-width: 680px;">
+                        <div style="font-weight: 700; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 8px;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="#25D366"><path d="M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z"/></svg>
+                            <span>Only WhatsApp Widget (Direct WhatsApp Redirection)</span>
+                            <span class="pill" style="background: #25D366; color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 8px;">WHATSAPP ONLY</span>
+                            <span class="pill" style="background: #e6f7ed; color: #15803d; font-size: 11px; font-weight: 600;">{{ number_format($whatsappConversions ?? ($settings->whatsapp_redirect_count ?? 0)) }} Conversions</span>
+                        </div>
+                        <p class="help" style="margin: 4px 0 0; font-size: 12px; color: var(--muted); line-height: 1.45;">
+                            When enabled, <strong>AI responses and human agent support are disabled</strong>. The public widget still displays greetings and default service-related questions, and users can type their inquiry. Clicking any service or sending any message immediately redirects the user to WhatsApp. <em>WhatsApp mobile number is mandatory to enable this mode.</em>
+                        </p>
+                    </div>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; background: #ffffff; border: 1px solid var(--line); padding: 6px 12px; border-radius: 6px;">
+                        <input type="checkbox" id="input-only-whatsapp-widget" name="only_whatsapp_widget" value="1" @checked($isOnlyWhatsApp)>
+                        <span id="label-only-whatsapp-widget">{{ $isOnlyWhatsApp ? 'WhatsApp Only (AI & Human Off)' : 'Disabled (AI + Agents Active)' }}</span>
+                    </label>
+                </div>
                 
                 <!-- 1. Assistant Identity & Design -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; border-bottom: 1px solid var(--line); padding-bottom: 12px;">
@@ -485,6 +507,58 @@
                 statusSelect.addEventListener('change', syncWidgetStatus);
             }
 
+            // Only WhatsApp Widget toggle and mandatory validation
+            const onlyWhatsAppCheckbox = document.getElementById('input-only-whatsapp-widget');
+            const onlyWhatsAppLabel = document.getElementById('label-only-whatsapp-widget');
+            const waNumberInput = document.getElementById('input-whatsapp-number');
+            const liveChatCheckbox = document.querySelector('input[name="live_chat_enabled"]');
+
+            function syncOnlyWhatsApp() {
+                if (!onlyWhatsAppCheckbox) return;
+                const isOnlyWa = onlyWhatsAppCheckbox.checked;
+                if (onlyWhatsAppLabel) {
+                    onlyWhatsAppLabel.textContent = isOnlyWa ? 'WhatsApp Only (AI & Human Off)' : 'Disabled (AI + Agents Active)';
+                }
+                if (isOnlyWa) {
+                    if (liveChatCheckbox) {
+                        liveChatCheckbox.checked = false;
+                        liveChatCheckbox.disabled = true;
+                    }
+                    if (waNumberInput && !waNumberInput.value.trim()) {
+                        waNumberInput.style.borderColor = '#ef4444';
+                    }
+                } else {
+                    if (liveChatCheckbox) {
+                        liveChatCheckbox.disabled = false;
+                    }
+                    if (waNumberInput) {
+                        waNumberInput.style.borderColor = '';
+                    }
+                }
+            }
+
+            if (onlyWhatsAppCheckbox) {
+                onlyWhatsAppCheckbox.addEventListener('change', syncOnlyWhatsApp);
+                syncOnlyWhatsApp();
+            }
+
+            // Client-side form validation ensuring WhatsApp mobile number is mandatory when Only WhatsApp Widget is enabled
+            const mainForm = document.querySelector('form[action="{{ route('admin.super.organizations.widget.update', $organization) }}"]');
+            if (mainForm) {
+                mainForm.addEventListener('submit', function(e) {
+                    if (onlyWhatsAppCheckbox && onlyWhatsAppCheckbox.checked) {
+                        if (!waNumberInput || !waNumberInput.value.trim()) {
+                            e.preventDefault();
+                            waNumberInput.style.borderColor = '#ef4444';
+                            waNumberInput.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.2)';
+                            waNumberInput.focus();
+                            waNumberInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            alert('WhatsApp mobile number is mandatory to enable "Only WhatsApp Widget" mode. Please provide a valid phone number or link.');
+                        }
+                    }
+                });
+            }
+
             if (welcomeInput) {
                 welcomeInput.addEventListener('input', function() {
                     const val = this.value.trim() || 'Welcome! How can we assist you?';
@@ -523,26 +597,96 @@
             body.appendChild(userMsgDiv);
             body.scrollTop = body.scrollHeight;
 
+            // If Only WhatsApp Widget is enabled: immediately redirect to WhatsApp with prefilled message
+            const onlyWaCheckbox = document.getElementById('input-only-whatsapp-widget') || document.getElementById('input-only-whatsapp');
+            const isOnlyWa = onlyWaCheckbox ? onlyWaCheckbox.checked : Boolean(@json($settings->only_whatsapp_widget ?? false));
+            if (isOnlyWa) {
+                const waInput = document.getElementById('input-whatsapp-number');
+                const rawWa = (waInput ? waInput.value.trim() : '') || @json($settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone ?: '');
+                let waUrl = '';
+                if (rawWa.startsWith('http://') || rawWa.startsWith('https://')) {
+                    const sep = rawWa.includes('?') ? '&' : '?';
+                    waUrl = `${rawWa}${sep}text=${encodeURIComponent(query)}`;
+                } else {
+                    const cleanPhone = rawWa.replace(/[^0-9]/g, '');
+                    waUrl = `https://wa.me/${cleanPhone || '919876543210'}?text=${encodeURIComponent(query)}`;
+                }
+
+                // Render dedicated WhatsApp redirect action card
+                const waActionDiv = document.createElement('div');
+                waActionDiv.style.cssText = 'display: flex; justify-content: flex-start; margin-top: 8px; width: 100%;';
+                waActionDiv.innerHTML = `
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 10px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; max-width: 85%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                        <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #15803d; margin-bottom: 4px;">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366" style="flex-shrink:0;"><path d="M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z"/></svg>
+                            <span>Opening WhatsApp...</span>
+                        </div>
+                        <p style="margin: 0 0 8px 0; font-size: 11.5px; color: #166534;">
+                            Redirecting you to our official WhatsApp support. If your browser blocked the window:
+                        </p>
+                        <a href="${waUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; background: #25d366; color: #ffffff; padding: 6px 12px; border-radius: 16px; font-size: 11.5px; font-weight: 600; text-decoration: none;">
+                            <span>Open WhatsApp</span> &rarr;
+                        </a>
+                    </div>
+                `;
+                body.appendChild(waActionDiv);
+                body.scrollTop = body.scrollHeight;
+
+                try {
+                    window.open(waUrl, '_blank');
+                } catch (e) {
+                    try { window.location.href = waUrl; } catch {}
+                }
+                return;
+            }
+
             typing.style.display = 'flex';
             body.scrollTop = body.scrollHeight;
 
             try {
-                // Call live backend endpoint
-                const endpoint = `${apiUrl.replace(/\/+$/, '')}/api/widget/chat?widget_key=${encodeURIComponent(widgetKey)}`;
+                // Call live backend endpoint with dynamic mode parameter
+                const endpoint = `${apiUrl.replace(/\/+$/, '')}/api/widget/chat?mode=ai_support&widget_key=${encodeURIComponent(widgetKey)}`;
                 const res = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ question_text: query })
+                    body: JSON.stringify({ question_text: query, mode: 'ai_support' })
                 });
 
                 typing.style.display = 'none';
 
                 if (res.ok) {
                     const data = await res.json();
-                    renderAssistantResponse(data.answer_text || 'Thank you for your message.', data.sources || []);
+                    if (data.redirect_url || data.whatsapp_url || data.answer_status === 'whatsapp_redirect') {
+                        const waUrl = data.redirect_url || data.whatsapp_url;
+                        const waActionDiv = document.createElement('div');
+                        waActionDiv.style.cssText = 'display: flex; justify-content: flex-start; margin-top: 8px; width: 100%;';
+                        waActionDiv.innerHTML = `
+                            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; padding: 10px 12px; border-radius: 12px 12px 12px 3px; font-size: 12px; max-width: 85%; line-height: 1.4; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #15803d; margin-bottom: 4px;">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366" style="flex-shrink:0;"><path d="M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z"/></svg>
+                                    <span>Opening WhatsApp...</span>
+                                </div>
+                                <p style="margin: 0 0 8px 0; font-size: 11.5px; color: #166534;">
+                                    Connecting to WhatsApp with your enquiry:
+                                </p>
+                                <a href="${waUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 5px; background: #25d366; color: #ffffff; padding: 6px 12px; border-radius: 16px; font-size: 11.5px; font-weight: 600; text-decoration: none;">
+                                    <span>Open WhatsApp</span> &rarr;
+                                </a>
+                            </div>
+                        `;
+                        body.appendChild(waActionDiv);
+                        body.scrollTop = body.scrollHeight;
+                        if (waUrl) {
+                            try { window.open(waUrl, '_blank'); } catch(e) {}
+                        }
+                        return;
+                    }
+                    if (data.answer_text) {
+                        renderAssistantResponse(data.answer_text, data.sources || []);
+                    }
                 } else {
                     // Fallback intelligent simulation
                     simulateLocalResponse(query);

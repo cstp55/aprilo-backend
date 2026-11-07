@@ -25,6 +25,8 @@ class WidgetConversation extends Model
         'page_title',
         'mode',
         'status',
+        'is_whatsapp_redirected',
+        'whatsapp_redirected_at',
         'assigned_agent_id',
         'assigned_agent_name',
         'metadata',
@@ -34,6 +36,8 @@ class WidgetConversation extends Model
         'metadata' => 'array',
         'lead_captured' => 'boolean',
         'lead_captured_at' => 'datetime',
+        'is_whatsapp_redirected' => 'boolean',
+        'whatsapp_redirected_at' => 'datetime',
     ];
 
     public function organization(): BelongsTo

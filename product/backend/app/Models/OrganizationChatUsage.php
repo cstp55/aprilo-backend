@@ -16,6 +16,7 @@ class OrganizationChatUsage extends Model
         'organization_id',
         'usage_date',
         'queries_count',
+        'whatsapp_redirects_count',
         'prompt_tokens',
         'completion_tokens',
         'total_tokens',
@@ -27,6 +28,7 @@ class OrganizationChatUsage extends Model
         return [
             'usage_date' => 'date',
             'queries_count' => 'integer',
+            'whatsapp_redirects_count' => 'integer',
             'prompt_tokens' => 'integer',
             'completion_tokens' => 'integer',
             'total_tokens' => 'integer',
@@ -97,6 +99,42 @@ class OrganizationChatUsage extends Model
             if ($cost > 0 && \Illuminate\Support\Facades\Schema::hasColumn('organization_settings', 'usage_amount_due')) {
                 $settings->increment('usage_amount_due', $cost);
             }
+        }
+
+        return $usage;
+    }
+
+    /**
+     * Atomically log WhatsApp redirect conversion for today.
+     */
+    public static function recordWhatsAppRedirect(string $organizationId): self
+    {
+        $today = Carbon::today()->toDateString();
+
+        /** @var self $usage */
+        $usage = static::firstOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'usage_date' => $today,
+            ],
+            [
+                'queries_count' => 0,
+                'whatsapp_redirects_count' => 0,
+                'prompt_tokens' => 0,
+                'completion_tokens' => 0,
+                'total_tokens' => 0,
+                'cost_estimate' => 0.0000,
+            ]
+        );
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('organization_chat_usages', 'whatsapp_redirects_count')) {
+            $usage->increment('whatsapp_redirects_count', 1);
+        }
+
+        // Also increment aggregate counts on organization_settings
+        $settings = OrganizationSetting::where('organization_id', $organizationId)->first();
+        if ($settings && \Illuminate\Support\Facades\Schema::hasColumn('organization_settings', 'whatsapp_redirect_count')) {
+            $settings->increment('whatsapp_redirect_count', 1);
         }
 
         return $usage;

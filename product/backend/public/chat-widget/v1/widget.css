@@ -635,3 +635,44 @@
   box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
   transform: translateY(-1px);
 }
+
+.aprilo-msg-bubble p.aprilo-p {
+  margin: 0 0 6px 0;
+}
+
+.aprilo-msg-bubble p.aprilo-p:last-child {
+  margin-bottom: 0;
+}
+
+.aprilo-msg-bubble ul.aprilo-list,
+.aprilo-msg-bubble ol.aprilo-list {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.aprilo-msg-bubble ul.aprilo-list li,
+.aprilo-msg-bubble ol.aprilo-list li {
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+.aprilo-msg-bubble ul.aprilo-list li:last-child,
+.aprilo-msg-bubble ol.aprilo-list li:last-child {
+  margin-bottom: 0;
+}
+
+.aprilo-msg-bubble a.aprilo-link {
+  color: var(--aprilo-primary, #0284c7);
+  text-decoration: underline;
+  word-break: break-all;
+  transition: opacity 0.2s ease;
+}
+
+.aprilo-msg.user .aprilo-msg-bubble a.aprilo-link {
+  color: #FFFFFF;
+  text-decoration: underline;
+}
+
+.aprilo-msg-bubble a.aprilo-link:hover {
+  opacity: 0.8;
+}

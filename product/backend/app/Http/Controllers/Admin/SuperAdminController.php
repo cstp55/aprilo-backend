@@ -167,6 +167,9 @@ class SuperAdminController extends Controller
         $defaultSystemPrompt = "You are " . ($settings->assistant_name ?: ($organization->name . ' Assistant')) . ", the official virtual assistant for " . $organization->name . ". Greet visitors courteously, provide clear and accurate information about our services and guidelines, and direct complex inquiries to our support team.";
         $defaultEligibility = "Answer questions strictly relevant to " . $organization->name . " services, policies, and customer inquiries. Do not share confidential internal credentials, employee private records, or proprietary system secrets. If uncertain, suggest speaking with our human support team.";
 
+        $whatsappConversions = (int) ($settings->whatsapp_redirect_count ?? 0);
+        $isOnlyWhatsAppWidget = (bool) ($settings->only_whatsapp_widget ?? false);
+
         return view('admin.super.organization-widget', compact(
             'organization',
             'settings',
@@ -175,7 +178,9 @@ class SuperAdminController extends Controller
             'defaultWelcomeMessage',
             'defaultOrgDetails',
             'defaultSystemPrompt',
-            'defaultEligibility'
+            'defaultEligibility',
+            'whatsappConversions',
+            'isOnlyWhatsAppWidget'
         ));
     }
 
@@ -190,6 +195,7 @@ class SuperAdminController extends Controller
             'chatbot_icon' => ['required', Rule::in(['robot', 'support', 'star', 'chat'])],
             'live_chat_enabled' => ['nullable', 'boolean'],
             'is_widget_enabled' => ['nullable', 'boolean'],
+            'only_whatsapp_widget' => ['nullable', 'boolean'],
             'welcome_message' => ['nullable', 'string', 'max:1000'],
             'whatsapp_number' => ['nullable', 'string', 'max:100'],
             'whatsapp_sender_phone' => ['nullable', 'string', 'max:100'],
@@ -204,7 +210,19 @@ class SuperAdminController extends Controller
             'lead_notification_email' => ['nullable', 'email', 'max:255'],
         ]);
 
-        $validated['live_chat_enabled'] = $request->boolean('live_chat_enabled');
+        $onlyWhatsApp = $request->boolean('only_whatsapp_widget');
+        if ($onlyWhatsApp) {
+            $rawWa = trim($request->input('whatsapp_number') ?? $settings->whatsapp_number ?? '');
+            if (empty($rawWa)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'whatsapp_number' => 'A valid WhatsApp mobile number is mandatory to enable "Only WhatsApp Widget" mode.',
+                ]);
+            }
+            $validated['live_chat_enabled'] = false;
+        } else {
+            $validated['live_chat_enabled'] = $request->boolean('live_chat_enabled');
+        }
+        $validated['only_whatsapp_widget'] = $onlyWhatsApp;
         $validated['is_widget_enabled'] = $request->boolean('is_widget_enabled');
         $validated['strict_context_enforcement'] = $request->boolean('strict_context_enforcement');
         $validated['enable_lead_capture'] = $request->boolean('enable_lead_capture');
@@ -638,6 +656,9 @@ class SuperAdminController extends Controller
         $todayTokens = (int) OrganizationChatUsage::where('usage_date', $today)->sum('total_tokens');
         $todayCost = (float) OrganizationChatUsage::where('usage_date', $today)->sum('cost_estimate');
 
+        $totalWhatsAppConversions = (int) OrganizationSetting::sum('whatsapp_redirect_count');
+        $todayWhatsAppConversions = (int) OrganizationChatUsage::where('usage_date', $today)->sum('whatsapp_redirects_count');
+
         $activeOrgsCount = OrganizationChatUsage::distinct('organization_id')->count('organization_id');
         $totalOrgsCount = Organization::count();
 
@@ -649,6 +670,7 @@ class SuperAdminController extends Controller
                 DB::raw('SUM(completion_tokens) as total_completion_tokens'),
                 DB::raw('SUM(total_tokens) as total_tokens'),
                 DB::raw('SUM(cost_estimate) as total_cost'),
+                DB::raw('SUM(whatsapp_redirects_count) as total_whatsapp_redirects'),
                 DB::raw('COUNT(DISTINCT organization_id) as active_orgs')
             )
             ->groupBy('usage_date')
@@ -686,6 +708,8 @@ class SuperAdminController extends Controller
             'todayQueries',
             'todayTokens',
             'todayCost',
+            'totalWhatsAppConversions',
+            'todayWhatsAppConversions',
             'activeOrgsCount',
             'totalOrgsCount',
             'dailyUsages',
@@ -726,6 +750,9 @@ class SuperAdminController extends Controller
         $todayTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('total_tokens');
         $todayCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('cost_estimate');
 
+        $totalWhatsAppConversions = (int) ($settings->whatsapp_redirect_count ?? 0);
+        $todayWhatsAppConversions = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('whatsapp_redirects_count');
+
         $dailyUsages = OrganizationChatUsage::query()
             ->where('organization_id', $organization->id)
             ->orderByDesc('usage_date')
@@ -742,6 +769,8 @@ class SuperAdminController extends Controller
             'todayQueries',
             'todayTokens',
             'todayCost',
+            'totalWhatsAppConversions',
+            'todayWhatsAppConversions',
             'dailyUsages',
             'firestoreSummary',
             'firebaseSync'

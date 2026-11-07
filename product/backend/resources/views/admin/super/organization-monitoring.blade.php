@@ -130,7 +130,16 @@
     </div>
 
     <!-- Organization Metrics Cards -->
-    <div class="grid grid-4" style="margin-bottom: 24px; gap: 16px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="card" style="border-left: 4px solid #25D366; padding: 16px 20px;">
+            <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #15803d; letter-spacing: 0.5px; display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M20.52 3.48A11.93 11.93 0 0012.04 0C5.46 0 .11 5.35.11 11.93c0 2.1.55 4.15 1.6 5.96L0 24l6.29-1.65a11.9 11.9 0 005.75 1.47h.01c6.58 0 11.93-5.35 11.93-11.93 0-3.19-1.24-6.19-3.46-8.41zM12.04 21.8c-1.78 0-3.52-.48-5.04-1.39l-.36-.21-3.74.98 1-3.64-.23-.37a9.88 9.88 0 01-1.52-5.24c0-5.48 4.46-9.94 9.94-9.94 2.65 0 5.15 1.03 7.03 2.91a9.89 9.89 0 012.91 7.03c0 5.48-4.46 9.94-9.94 9.94z"/></svg>
+                <span>WhatsApp Conversions</span>
+            </div>
+            <div class="metric" style="font-size: 28px; margin: 6px 0 2px; color: #15803d;">{{ number_format($totalWhatsAppConversions ?? ($settings->whatsapp_redirect_count ?? 0)) }}</div>
+            <div style="font-size: 12px; color: var(--muted);">Today Redirects: <strong>{{ number_format($todayWhatsAppConversions ?? 0) }}</strong></div>
+        </div>
+
         <div class="card" style="border-left: 4px solid #6366f1; padding: 16px 20px;">
             <div style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px;">AI Queries Tracked</div>
             <div class="metric" style="font-size: 28px; margin: 6px 0 2px;">{{ number_format($firestoreSummary['total_ai_queries'] ?? $totalQueries) }}</div>
@@ -173,6 +182,7 @@
                 <thead>
                     <tr>
                         <th>Date</th>
+                        <th>WhatsApp Redirects</th>
                         <th>Queries Answered</th>
                         <th>Prompt (Input) Tokens</th>
                         <th>Completion (Output) Tokens</th>
@@ -184,6 +194,7 @@
                     @forelse ($dailyUsages as $day)
                         <tr>
                             <td style="font-weight: 600; font-family: monospace;">{{ $day->usage_date ? $day->usage_date->format('Y-m-d (D)') : 'N/A' }}</td>
+                            <td style="font-weight: 700; color: #15803d;">{{ number_format($day->whatsapp_redirects_count ?? 0) }}</td>
                             <td style="font-weight: 600;">{{ number_format($day->queries_count) }}</td>
                             <td>{{ number_format($day->prompt_tokens) }}</td>
                             <td>{{ number_format($day->completion_tokens) }}</td>
@@ -192,7 +203,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--muted); padding: 24px;">No daily chat usage recorded for this organization yet. Click "Sync Live from Firestore" above.</td>
+                            <td colspan="7" style="text-align: center; color: var(--muted); padding: 24px;">No daily chat usage recorded for this organization yet. Click "Sync Live from Firestore" above.</td>
                         </tr>
                     @endforelse
                 </tbody>

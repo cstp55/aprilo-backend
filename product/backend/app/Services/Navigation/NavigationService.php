@@ -58,6 +58,12 @@ class NavigationService
                         'active' => request()->routeIs('admin.super.revenue*'),
                     ],
                     [
+                        'title' => 'Payments & Invoices',
+                        'route' => 'admin.invoices.index',
+                        'icon' => 'receipt',
+                        'active' => request()->routeIs('admin.invoices*'),
+                    ],
+                    [
                         'title' => 'Global Audit Logs',
                         'route' => 'admin.super.logs',
                         'icon' => 'history',
@@ -396,7 +402,13 @@ class NavigationService
             ];
         }
 
-        if ($user->hasPermission('billing.view')) {
+        if ($user->hasPermission('billing.view') || $user->role_slug === 'owner' || $user->isSuperAdmin()) {
+            $adminItems[] = [
+                'title' => 'Payments & Invoices',
+                'route' => 'admin.invoices.index',
+                'icon' => 'receipt',
+                'active' => request()->routeIs('admin.invoices*'),
+            ];
             $adminItems[] = [
                 'title' => 'Billing & Plans',
                 'route' => 'admin.settings.pricing',

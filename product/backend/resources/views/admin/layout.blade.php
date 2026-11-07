@@ -593,12 +593,52 @@
             const body = document.body;
             const toggle = document.querySelector('.mobile-sidebar-toggle');
             const overlay = document.querySelector('.mobile-sidebar-overlay');
+            const sidebar = document.querySelector('.sidebar');
+
+            // Scroll selected/active navigation into visible view
+            function ensureActiveNavVisible() {
+                if (!sidebar) return;
+                const activeNav = sidebar.querySelector('.nav a.active') || sidebar.querySelector('a.active');
+                if (activeNav) {
+                    // Check if active item is outside or near boundaries of visible sidebar
+                    const sidebarRect = sidebar.getBoundingClientRect();
+                    const activeRect = activeNav.getBoundingClientRect();
+                    const isFullyVisible = (
+                        activeRect.top >= sidebarRect.top + 20 &&
+                        activeRect.bottom <= sidebarRect.bottom - 20
+                    );
+
+                    if (!isFullyVisible) {
+                        activeNav.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+                    }
+                }
+            }
+
+            // Immediately ensure active navigation is visible upon page load
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', ensureActiveNavVisible);
+            } else {
+                ensureActiveNavVisible();
+            }
+
+            // Save sidebar scroll position on user scrolling
+            if (sidebar) {
+                sidebar.addEventListener('scroll', function () {
+                    try {
+                        sessionStorage.setItem('aprilo_sidebar_scroll', String(sidebar.scrollTop));
+                    } catch (e) {}
+                }, { passive: true });
+            }
+
             if (!toggle || !overlay) return;
 
             const setSidebarState = (open) => {
                 body.classList.toggle('sidebar-open', open);
                 toggle.setAttribute('aria-expanded', String(open));
                 toggle.textContent = open ? '✕' : '☰';
+                if (open) {
+                    setTimeout(ensureActiveNavVisible, 120);
+                }
             };
 
             toggle.addEventListener('click', function () {

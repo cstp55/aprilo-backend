@@ -505,7 +505,12 @@
 
                     <!-- Payment History / Invoice Records Table -->
                     <div class="card">
-                        <h3 style="margin-bottom: 12px; font-size: 15px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">Payment & Invoice History</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 12px; flex-wrap: wrap; gap: 8px;">
+                            <h3 style="margin: 0; font-size: 15px;">Payment & Invoice History</h3>
+                            <a href="{{ route('admin.invoices.index') }}" class="button" style="width: auto; padding: 6px 12px; font-size: 12px; text-decoration: none;">
+                                Open Payments & Invoice Hub →
+                            </a>
+                        </div>
                         @if ($invoices->isEmpty())
                             <div style="text-align: center; padding: 30px; color: var(--muted); font-size: 13px;">
                                 No invoices generated yet. Accrue query traffic and click "Generate Invoice & Close Cycle" above to generate a downloadable bill.
@@ -530,7 +535,7 @@
                                                 {{ $invoice->billing_period_start->format('M d') }} - {{ $invoice->billing_period_end->format('M d, Y') }}
                                             </td>
                                             <td style="padding: 12px 8px; text-transform: capitalize;">{{ str_replace('_', ' ', $invoice->billing_mode) }}</td>
-                                            <td style="padding: 12px 8px; font-weight: 700; color: var(--green);">${{ number_format($invoice->amount, 2) }}</td>
+                                            <td style="padding: 12px 8px; font-weight: 700; color: var(--green);">₹{{ number_format($invoice->amount, 2) }}</td>
                                             <td style="padding: 12px 8px;">
                                                 <span style="background: #e6f7ed; color: #1f7a3f; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 99px;">{{ ucfirst($invoice->status) }}</span>
                                             </td>

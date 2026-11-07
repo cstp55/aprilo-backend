@@ -20,11 +20,11 @@
 
     <div class="grid grid-2" style="margin-bottom: 24px;">
         <div class="card" style="border-left: 4px solid #10b981;">
-            <div class="metric">${{ number_format($totalPaid, 2) }}</div>
+            <div class="metric">₹{{ number_format($totalPaid, 2) }}</div>
             <div class="label">Total Paid Invoices</div>
         </div>
         <div class="card" style="border-left: 4px solid #f59e0b;">
-            <div class="metric">${{ number_format($totalPending, 2) }}</div>
+            <div class="metric">₹{{ number_format($totalPending, 2) }}</div>
             <div class="label">Pending Receivables</div>
         </div>
     </div>
@@ -37,24 +37,34 @@
                 <th>Amount</th>
                 <th>Status</th>
                 <th>Issued Date</th>
+                <th style="text-align: right;">Action</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($invoices as $inv)
                 <tr>
-                    <td><strong>{{ $inv->invoice_number }}</strong></td>
+                    <td>
+                        <a href="{{ route('admin.invoices.show', $inv->id) }}" style="font-weight: 700; color: #10b981; text-decoration: none;">
+                            {{ $inv->invoice_number }}
+                        </a>
+                    </td>
                     <td>{{ $inv->organization->name ?? 'Unknown' }}</td>
-                    <td style="font-weight: 700;">${{ number_format((float) $inv->amount, 2) }}</td>
+                    <td style="font-weight: 700;">₹{{ number_format((float) $inv->amount, 2) }}</td>
                     <td>
                         <span class="pill" style="{{ $inv->status === 'paid' ? 'background: rgba(16, 185, 129, 0.15); color: #059669;' : 'background: rgba(245, 158, 11, 0.15); color: #d97706;' }} font-size: 11px; text-transform: uppercase;">
                             {{ $inv->status }}
                         </span>
                     </td>
-                    <td>{{ $inv->created_at ? $inv->created_at->format('M d, Y') : 'N/A' }}</td>
+                    <td>{{ $inv->created_at ? $inv->created_at->format('d M Y') : 'N/A' }}</td>
+                    <td style="text-align: right;">
+                        <a href="{{ route('admin.invoices.show', $inv->id) }}" class="button" style="width: auto; padding: 5px 12px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; text-decoration: none;">
+                            View / PDF
+                        </a>
+                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="5">No invoices generated yet.</td>
+                    <td colspan="6">No invoices generated yet.</td>
                 </tr>
             @endforelse
         </tbody>

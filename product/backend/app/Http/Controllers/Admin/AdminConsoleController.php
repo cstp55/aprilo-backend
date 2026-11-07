@@ -136,6 +136,7 @@ class AdminConsoleController extends Controller
             ]
         );
 
+
         return view('admin.sources', [
             'settings' => $settings,
             'sources' => KnowledgeSource::query()
@@ -234,6 +235,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
@@ -251,6 +253,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
@@ -268,6 +271,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
@@ -285,6 +289,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
@@ -302,6 +307,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
         return view('admin.settings', compact('settings', 'tab', 'organization', 'invoices'));
     }
@@ -370,20 +376,51 @@ class AdminConsoleController extends Controller
             };
         }
 
-        // Generate unique invoice number
-        $invoiceNumber = 'INV-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -4));
+        // Generate central sequence invoice number
+        $invoiceNumber = \App\Models\Invoice::generateNumber('sales_invoice');
 
-        \App\Models\Invoice::create([
+        $invoiceData = [
             'organization_id' => $organization->id,
             'invoice_number' => $invoiceNumber,
             'billing_mode' => $settings->billing_mode,
             'amount' => $amount,
-            'status' => $amount > 0 ? 'paid' : 'paid',
+            'status' => 'paid',
             'billing_period_start' => now()->startOfMonth(),
             'billing_period_end' => now()->endOfMonth(),
             'due_date' => now()->addDays(15),
             'paid_at' => now(),
-        ]);
+        ];
+
+        $extraData = [
+            'document_type' => 'sales_invoice',
+            'currency' => 'INR',
+            'customer_name' => $organization->name,
+            'customer_email' => $organization->owner?->email,
+            'customer_id' => 'CUST-' . strtoupper(substr(str_replace('-', '', $organization->id), 0, 4)),
+            'product_name' => 'Aprilo AI – ' . ucfirst($organization->plan ?? 'Professional') . ' Subscription',
+            'product_type' => 'SaaS Subscription',
+            'plan_name' => ucfirst($organization->plan ?? 'Professional'),
+            'order_id' => 'APR-ORD-' . strtoupper(substr(uniqid(), -4)),
+            'billing_period_text' => now()->startOfMonth()->format('d M Y') . ' – ' . now()->endOfMonth()->format('d M Y'),
+            'quantity' => 1,
+            'unit_amount' => $amount,
+            'discount_amount' => 0.00,
+            'subtotal' => $amount,
+            'gst_rate' => 0.00,
+            'gst_amount' => 0.00,
+            'total_amount' => $amount,
+            'payment_method' => 'UPI / Online Payment',
+            'payment_reference' => 'TXN-' . strtoupper(substr(md5(uniqid()), 0, 8)),
+            'notes' => 'Thank you for choosing Aprilo Infotech. Build Smarter. Grow Faster.',
+        ];
+
+        foreach ($extraData as $col => $val) {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('invoices', $col)) {
+                $invoiceData[$col] = $val;
+            }
+        }
+
+        \App\Models\Invoice::create($invoiceData);
 
         // Reset usage counts
         $settings->update([
@@ -444,6 +481,23 @@ class AdminConsoleController extends Controller
             ]
         );
 
+        if ($request->has('only_whatsapp_widget')) {
+            $onlyWa = $request->boolean('only_whatsapp_widget');
+            if ($onlyWa) {
+                $rawWa = trim($request->input('whatsapp_number') ?? $settings->whatsapp_number ?? '');
+                if (empty($rawWa)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'whatsapp_number' => 'A valid WhatsApp mobile number is mandatory to enable "Only WhatsApp Widget" mode.',
+                    ]);
+                }
+                $validated['chatbot_escalation_enabled'] = false;
+            }
+            $validated['only_whatsapp_widget'] = $onlyWa;
+        }
+        if ($request->filled('whatsapp_number')) {
+            $validated['whatsapp_number'] = $request->input('whatsapp_number');
+        }
+
         $settings->update($validated);
 
         $tab = $request->query('tab', 'agent');
@@ -483,6 +537,7 @@ class AdminConsoleController extends Controller
                 'assistant_name' => 'Aprilo Bot',
             ]
         );
+
 
         $tab = 'connect_' . $platform;
         $invoices = \App\Models\Invoice::where('organization_id', $organization->id)->latest()->get();
@@ -978,6 +1033,9 @@ class AdminConsoleController extends Controller
         $todayTokens = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('total_tokens');
         $todayCost = (float) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('cost_estimate');
 
+        $totalWhatsAppConversions = (int) ($settings->whatsapp_redirect_count ?? 0);
+        $todayWhatsAppConversions = (int) OrganizationChatUsage::where('organization_id', $organization->id)->where('usage_date', $today)->sum('whatsapp_redirects_count');
+
         $dailyUsages = OrganizationChatUsage::query()
             ->where('organization_id', $organization->id)
             ->orderByDesc('usage_date')
@@ -994,6 +1052,8 @@ class AdminConsoleController extends Controller
             'todayQueries',
             'todayTokens',
             'todayCost',
+            'totalWhatsAppConversions',
+            'todayWhatsAppConversions',
             'dailyUsages',
             'firestoreSummary',
             'firebaseSync'

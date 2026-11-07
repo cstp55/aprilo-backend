@@ -20,7 +20,9 @@ class OrganizationSetting extends Model
         'default_escalation_owner',
         'assistant_status',
         'is_widget_enabled',
+        'only_whatsapp_widget',
         'total_tokens_used',
+        'whatsapp_redirect_count',
         'chatbot_color_palette',
         'chatbot_icon',
         'chatbot_data_source',
@@ -101,7 +103,9 @@ class OrganizationSetting extends Model
             'enable_lead_capture' => 'boolean',
             'live_chat_enabled' => 'boolean',
             'is_widget_enabled' => 'boolean',
+            'only_whatsapp_widget' => 'boolean',
             'total_tokens_used' => 'integer',
+            'whatsapp_redirect_count' => 'integer',
             'max_support_agents' => 'integer',
             'chatbot_escalation_enabled' => 'boolean',
             'connect_teams' => 'boolean',
@@ -142,6 +146,20 @@ class OrganizationSetting extends Model
         }
 
         return $this->public_widget_key;
+    }
+
+    public function isOnlyWhatsAppWidgetEnabled(): bool
+    {
+        if ((bool) ($this->only_whatsapp_widget ?? false)) {
+            return true;
+        }
+
+        // In free version / plan, AI will not respond, default enabled only whatsapp widget
+        if ($this->organization && $this->organization->isFreePlan()) {
+            return true;
+        }
+
+        return false;
     }
 
     public function getWhatsAppDirectUrl(string $prefilledText = ''): string

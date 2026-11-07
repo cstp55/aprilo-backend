@@ -49,8 +49,18 @@ class WidgetChatController extends Controller
         $chatbotIcon = $settings?->chatbot_icon ?: 'star';
         $avatarUrl = filter_var($chatbotIcon, FILTER_VALIDATE_URL) ? $chatbotIcon : '';
 
-        $humanSupportEnabled = (bool) ($settings?->live_chat_enabled ?? true)
+        $isOnlyWhatsApp = (bool) ($settings?->isOnlyWhatsAppWidgetEnabled() ?? false);
+        $whatsappNumber = $settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone ?: '';
+        $whatsappUrl = $settings?->getWhatsAppDirectUrl() ?: '';
+
+        $humanSupportEnabled = ! $isOnlyWhatsApp
+            && (bool) ($settings?->live_chat_enabled ?? true)
             && ($hasActiveAgents || $organization->supportsLiveChatAgents());
+
+        if ($isOnlyWhatsApp) {
+            $hasActiveAgents = false;
+            $hasOnlineAgents = false;
+        }
 
         return response()->json([
             'success' => true,
@@ -65,6 +75,9 @@ class WidgetChatController extends Controller
                 'position' => 'bottom-right',
                 'enabled' => $isWidgetEnabled,
                 'is_disabled' => ! $isWidgetEnabled,
+                'only_whatsapp_widget' => $isOnlyWhatsApp,
+                'whatsapp_url' => $whatsappUrl,
+                'whatsapp_number' => $whatsappNumber,
             ],
             'theme' => [
                 'primary_color' => $primaryColor,
@@ -80,8 +93,9 @@ class WidgetChatController extends Controller
                 'show_branding' => true,
                 'human_support_enabled' => $humanSupportEnabled,
                 'live_agent_available' => $hasActiveAgents,
+                'only_whatsapp_widget' => $isOnlyWhatsApp,
             ],
-            'agent' => $primaryAgent ? [
+            'agent' => ($primaryAgent && ! $isOnlyWhatsApp) ? [
                 'id' => $primaryAgent->id,
                 'name' => $primaryAgent->nickname ?: ($primaryAgent->user?->name ?? 'Support Agent'),
                 'nickname' => $primaryAgent->nickname,
@@ -89,15 +103,22 @@ class WidgetChatController extends Controller
                 'is_online' => $primaryAgent->availability_status === 'online',
             ] : null,
             'ai' => [
-                'enabled' => $isWidgetEnabled,
+                'enabled' => $isWidgetEnabled && ! $isOnlyWhatsApp,
                 'agent_id' => $primaryAgent?->id ?? 'ai_assistant',
                 'display_name' => $assistantName,
             ],
             'support' => [
                 'enabled' => $isWidgetEnabled,
                 'business_hours_enabled' => false,
-                'is_online' => $isOnline && ($hasOnlineAgents || $hasActiveAgents),
+                'is_online' => $isOnline && ($isOnlyWhatsApp || $hasOnlineAgents || $hasActiveAgents),
                 'live_agent_available' => $hasActiveAgents,
+                'only_whatsapp_widget' => $isOnlyWhatsApp,
+            ],
+            'whatsapp' => [
+                'enabled' => $isOnlyWhatsApp || !empty($whatsappNumber),
+                'only_whatsapp_widget' => $isOnlyWhatsApp,
+                'number' => $whatsappNumber,
+                'url' => $whatsappUrl,
             ],
             'quick_actions' => [
                 [
@@ -168,6 +189,31 @@ class WidgetChatController extends Controller
                     }
                     if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'metadata')) {
                         $table->json('metadata')->nullable();
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'is_whatsapp_redirected')) {
+                        $table->boolean('is_whatsapp_redirected')->default(false);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('widget_conversations', 'whatsapp_redirected_at')) {
+                        $table->timestamp('whatsapp_redirected_at')->nullable();
+                    }
+                });
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('organization_settings')) {
+                \Illuminate\Support\Facades\Schema::table('organization_settings', function (\Illuminate\Database\Schema\Blueprint $table): void {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('organization_settings', 'only_whatsapp_widget')) {
+                        $table->boolean('only_whatsapp_widget')->default(false);
+                    }
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('organization_settings', 'whatsapp_redirect_count')) {
+                        $table->unsignedBigInteger('whatsapp_redirect_count')->default(0);
+                    }
+                });
+            }
+
+            if (\Illuminate\Support\Facades\Schema::hasTable('organization_chat_usages')) {
+                \Illuminate\Support\Facades\Schema::table('organization_chat_usages', function (\Illuminate\Database\Schema\Blueprint $table): void {
+                    if (!\Illuminate\Support\Facades\Schema::hasColumn('organization_chat_usages', 'whatsapp_redirects_count')) {
+                        $table->unsignedInteger('whatsapp_redirects_count')->default(0);
                     }
                 });
             }
@@ -349,6 +395,32 @@ class WidgetChatController extends Controller
             ]);
         }
 
+        // Only WhatsApp Widget Mode: Disables AI responses and human agent handoffs
+        if ($settings && $settings->isOnlyWhatsAppWidgetEnabled()) {
+            OrganizationChatUsage::recordWhatsAppRedirect((string) $organization->id);
+
+            if ($conv) {
+                try {
+                    $conv->update([
+                        'mode' => 'whatsapp',
+                        'status' => 'whatsapp_redirected',
+                        'is_whatsapp_redirected' => true,
+                        'whatsapp_redirected_at' => now(),
+                    ]);
+                } catch (\Throwable $e) {}
+            }
+
+            $waUrl = $settings->getWhatsAppDirectUrl($validated['message']);
+
+            return response()->json([
+                'success' => true,
+                'mode' => 'whatsapp',
+                'only_whatsapp_widget' => true,
+                'redirect_url' => $waUrl,
+                'whatsapp_url' => $waUrl,
+            ]);
+        }
+
         $enableLeadCapture = (bool) ($settings?->enable_lead_capture ?? false);
         $leadCaptured = (bool) ($conv?->lead_captured ?? ($conv?->metadata['lead_captured'] ?? false));
         $leadPromptPending = (bool) ($conv?->metadata['lead_prompt_pending'] ?? false);
@@ -507,6 +579,10 @@ class WidgetChatController extends Controller
             'chatbot_icon' => $settings->chatbot_icon ?? 'robot',
             'connect_mail' => $settings->connect_mail ?? false,
             'hr_desk_email' => $settings->hr_desk_email ?? 'support@aprilo.ai',
+            'only_whatsapp_widget' => (bool) ($settings?->isOnlyWhatsAppWidgetEnabled() ?? false),
+            'whatsapp_number' => $settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone,
+            'whatsapp_url' => $settings?->getWhatsAppDirectUrl(),
+            'whatsapp_redirect_count' => (int) ($settings?->whatsapp_redirect_count ?? 0),
         ]);
     }
 
@@ -531,6 +607,19 @@ class WidgetChatController extends Controller
             ]);
         }
 
+        if ($settings && $settings->isOnlyWhatsAppWidgetEnabled()) {
+            OrganizationChatUsage::recordWhatsAppRedirect($org->id);
+            $waUrl = $settings->getWhatsAppDirectUrl($validated['question_text']);
+            return response()->json([
+                'question_id' => (string) Str::uuid(),
+                'answer_text' => '',
+                'answer_status' => 'whatsapp_redirect',
+                'redirect_url' => $waUrl,
+                'whatsapp_url' => $waUrl,
+                'sources' => [],
+            ]);
+        }
+
         $result = $this->processQueryForOrg($org, $validated['question_text'], null, $request);
 
         return response()->json($result);
@@ -539,6 +628,65 @@ class WidgetChatController extends Controller
     /**
      * Handles inbound emails, processes RAG search, and auto-replies.
      */
+    /**
+     * Track user redirection to WhatsApp and increment conversion counts.
+     */
+    public function recordWhatsAppRedirect(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'widget_key' => ['nullable', 'string', 'max:64'],
+            'session_id' => ['nullable', 'string', 'max:120'],
+            'conversation_id' => ['nullable', 'string', 'max:120'],
+            'message' => ['nullable', 'string', 'max:2000'],
+            'service_id' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        $organization = $this->resolveOrg($request);
+        $settings = $organization->settings;
+
+        // Atomically record conversion metric
+        OrganizationChatUsage::recordWhatsAppRedirect((string) $organization->id);
+
+        $convId = $validated['conversation_id'] ?? null;
+        if ($convId) {
+            try {
+                $conv = WidgetConversation::find($convId);
+                if ($conv) {
+                    $conv->update([
+                        'mode' => 'whatsapp',
+                        'status' => 'whatsapp_redirected',
+                        'is_whatsapp_redirected' => true,
+                        'whatsapp_redirected_at' => now(),
+                    ]);
+                    if (!empty($validated['message'])) {
+                        $conv->messages()->create([
+                            'sender_type' => 'user',
+                            'message_type' => 'whatsapp_redirect',
+                            'content' => $validated['message'],
+                            'metadata' => [
+                                'service_id' => $validated['service_id'] ?? null,
+                                'redirected' => true,
+                            ],
+                        ]);
+                    }
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Could not record conversation whatsapp redirect: ' . $e->getMessage());
+            }
+        }
+
+        $message = $validated['message'] ?? 'Hello! I would like more information about your services.';
+        $redirectUrl = $settings?->getWhatsAppDirectUrl($message) ?? 'https://wa.me/';
+
+        return response()->json([
+            'success' => true,
+            'redirect_url' => $redirectUrl,
+            'whatsapp_url' => $redirectUrl,
+            'whatsapp_number' => $settings?->whatsapp_number ?: $settings?->whatsapp_sender_phone,
+            'conversions_count' => (int) ($settings?->whatsapp_redirect_count ?? 0),
+        ]);
+    }
+
     public function inboundEmail(Request $request): JsonResponse
     {
         $validated = $request->validate([
