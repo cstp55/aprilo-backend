@@ -493,6 +493,14 @@ class OnboardingController extends Controller
 
         ProvisionOnboarding::dispatch($onboarding->id);
 
+        try {
+            \Illuminate\Support\Facades\Mail::to($result['user']->email)->queue(
+                new \App\Mail\ChatbotWelcomeMail($result['organization'], $result['user'])
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Welcome email delivery error: ' . $e->getMessage());
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Organization account successfully activated!',

@@ -76,10 +76,10 @@ class NavigationService
                         'active' => request()->routeIs('admin.super.cache*'),
                     ],
                     [
-                        'title' => 'WhatsApp Campaigns',
+                        'title' => 'Marketing & Campaigns',
                         'route' => 'admin.super.whatsapp-campaigns',
                         'icon' => 'message-circle',
-                        'active' => request()->routeIs('admin.super.whatsapp-campaigns*'),
+                        'active' => request()->routeIs('admin.super.whatsapp-campaigns*') || request()->routeIs('admin.super.marketing*'),
                     ],
                     [
                         'title' => 'Aprilo Support Settings',

@@ -60,9 +60,16 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::get('/logs', [SuperAdminController::class, 'logs'])->name('logs');
             Route::get('/cache', [SuperAdminController::class, 'cache'])->name('cache');
             Route::post('/cache/clear', [SuperAdminController::class, 'clearCache'])->name('cache.clear');
+            // WhatsApp & Product Marketing Campaigns Hub
             Route::get('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'index'])->name('whatsapp-campaigns');
             Route::get('/whatsapp-campaigns/templates', [WhatsAppCampaignController::class, 'templates'])->name('whatsapp-campaigns.templates');
             Route::post('/whatsapp-campaigns', [WhatsAppCampaignController::class, 'store'])->name('whatsapp-campaigns.store');
+            Route::post('/whatsapp-campaigns/{campaign}/resend', [WhatsAppCampaignController::class, 'resend'])->name('whatsapp-campaigns.resend');
+            Route::post('/marketing/ai-generate', [WhatsAppCampaignController::class, 'generateAiCopy'])->name('marketing.ai-generate');
+            Route::post('/marketing/leads', [WhatsAppCampaignController::class, 'storeLead'])->name('marketing.leads.store');
+            Route::patch('/marketing/leads/{lead}/status', [WhatsAppCampaignController::class, 'updateLeadStatus'])->name('marketing.leads.status');
+            Route::delete('/marketing/leads/{lead}', [WhatsAppCampaignController::class, 'destroyLead'])->name('marketing.leads.destroy');
+            Route::post('/marketing/trigger-cron', [WhatsAppCampaignController::class, 'triggerWeeklyCron'])->name('marketing.trigger-cron');
 
             // Products & Permissions Catalog Management
             Route::get('/products', [ProductManagementController::class, 'index'])->name('products');

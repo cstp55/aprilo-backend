@@ -16,6 +16,8 @@ class WhatsAppCampaign extends Model
     protected $fillable = [
         'created_by',
         'name',
+        'target_product',
+        'audience_segment', // all, leads, converted, manual
         'message_type',
         'template_name',
         'template_language',
@@ -24,6 +26,12 @@ class WhatsAppCampaign extends Model
         'consent_confirmed_at',
         'status',
         'completed_at',
+        'resend_count',
+        'last_resent_at',
+        'parent_campaign_id',
+        'ai_generated',
+        'ai_prompt_notes',
+        'is_automated',
     ];
 
     protected function casts(): array
@@ -32,6 +40,10 @@ class WhatsAppCampaign extends Model
             'template_parameters' => 'array',
             'consent_confirmed_at' => 'datetime',
             'completed_at' => 'datetime',
+            'last_resent_at' => 'datetime',
+            'resend_count' => 'integer',
+            'ai_generated' => 'boolean',
+            'is_automated' => 'boolean',
         ];
     }
 
@@ -43,5 +55,35 @@ class WhatsAppCampaign extends Model
     public function recipients(): HasMany
     {
         return $this->hasMany(WhatsAppCampaignRecipient::class, 'campaign_id');
+    }
+
+    public function parentCampaign(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_campaign_id');
+    }
+
+    public function resends(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_campaign_id');
+    }
+
+    public function cronLogs(): HasMany
+    {
+        return $this->hasMany(MarketingCronLog::class, 'campaign_id');
+    }
+
+    public function isResendable(): bool
+    {
+        return in_array($this->status, ['completed', 'partial', 'failed', 'queued'], true);
+    }
+
+    public function failedRecipientsCount(): int
+    {
+        return $this->recipients()->where('status', 'failed')->count();
+    }
+
+    public function acceptedRecipientsCount(): int
+    {
+        return $this->recipients()->where('status', 'accepted')->count();
     }
 }

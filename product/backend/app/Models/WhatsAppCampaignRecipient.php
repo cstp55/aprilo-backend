@@ -15,13 +15,16 @@ class WhatsAppCampaignRecipient extends Model
     protected $fillable = [
         'campaign_id',
         'user_id',
+        'lead_id',
         'recipient_name',
         'recipient_phone',
-        'status',
+        'status', // pending, accepted, failed
         'whatsapp_message_id',
         'response_json',
         'error_message',
         'processed_at',
+        'resend_attempt',
+        'last_attempted_at',
     ];
 
     protected function casts(): array
@@ -29,6 +32,8 @@ class WhatsAppCampaignRecipient extends Model
         return [
             'response_json' => 'array',
             'processed_at' => 'datetime',
+            'last_attempted_at' => 'datetime',
+            'resend_attempt' => 'integer',
         ];
     }
 
@@ -40,5 +45,10 @@ class WhatsAppCampaignRecipient extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function lead(): BelongsTo
+    {
+        return $this->belongsTo(MarketingLead::class, 'lead_id');
     }
 }
