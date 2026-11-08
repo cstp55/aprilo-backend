@@ -64,6 +64,12 @@ class NavigationService
                         'active' => request()->routeIs('admin.invoices*'),
                     ],
                     [
+                        'title' => 'Payment Links Generator',
+                        'route' => 'admin.super.payment-links',
+                        'icon' => 'link',
+                        'active' => request()->routeIs('admin.super.payment-links*'),
+                    ],
+                    [
                         'title' => 'Global Audit Logs',
                         'route' => 'admin.super.logs',
                         'icon' => 'history',

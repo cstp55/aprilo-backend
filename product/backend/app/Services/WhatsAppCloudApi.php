@@ -124,6 +124,47 @@ class WhatsAppCloudApi
         return $response->json();
     }
 
+    public function sendCustomText(string $toPhone, string $messageText): array
+    {
+        $phoneNumberId = config('services.whatsapp.phone_number_id');
+        $accessToken = config('services.whatsapp.access_token');
+
+        if (! $phoneNumberId || ! $accessToken) {
+            // In mock/test environment, return simulated message object safely
+            return [
+                'messaging_product' => 'whatsapp',
+                'contacts' => [['input' => $toPhone, 'wa_id' => $toPhone]],
+                'messages' => [['id' => 'wamid.simulated.' . uniqid()]],
+                'mock' => true,
+            ];
+        }
+
+        $payload = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $toPhone,
+            'type' => 'text',
+            'text' => [
+                'preview_url' => false,
+                'body' => $messageText,
+            ],
+        ];
+
+        $response = $this->client($accessToken)
+            ->post(sprintf(
+                'https://graph.facebook.com/%s/%s/messages',
+                config('services.whatsapp.api_version', 'v25.0'),
+                $phoneNumberId
+            ), $payload);
+
+        if (! $response->successful()) {
+            $message = $response->json('error.message') ?: 'Meta rejected the WhatsApp message.';
+            throw new RuntimeException(sprintf('Meta API error (%d): %s', $response->status(), $message));
+        }
+
+        return $response->json();
+    }
+
     public function getSettings(): array
     {
         $phoneNumberId = config('services.whatsapp.phone_number_id');

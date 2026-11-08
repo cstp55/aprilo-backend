@@ -315,7 +315,7 @@ class ProductsAndPlansSeeder extends Seeder
         );
 
         // 7. Magento 2 Native Extension License
-        Product::updateOrCreate(
+        $magentoSuite = Product::updateOrCreate(
             ['slug' => 'aprilo-magento-suite'],
             [
                 'name' => 'Aprilo Commerce for Magento 2 (Module)',
@@ -337,6 +337,26 @@ class ProductsAndPlansSeeder extends Seeder
                     'Bi-directional Product & Order Catalog Sync',
                     'AI Semantic Search & Product Recommendations',
                     'Domain-locked License Key Generator',
+                ],
+            ]
+        );
+
+        Plan::updateOrCreate(
+            ['product_id' => $magentoSuite->id, 'slug' => 'single-store'],
+            [
+                'name' => 'Single Store License',
+                'billing_cycle' => 'one_time',
+                'price' => 1999.00,
+                'currency' => 'INR',
+                'trial_period_days' => 0,
+                'request_limit' => 0,
+                'is_popular' => true,
+                'is_active' => true,
+                'sort_order' => 1,
+                'features' => [
+                    'Single Store License Key',
+                    'Magento 2.4.x PHP Extension',
+                    'Catalog Semantic Vector Sync',
                 ],
             ]
         );

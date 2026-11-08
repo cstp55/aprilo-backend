@@ -28,10 +28,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
-        'razorpay' => [
-            'key_id' => env('RAZORPAY_KEY_ID'),
-            'key_secret' => env('RAZORPAY_KEY_SECRET'),
-            'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
+    'razorpay' => [
+        'key_id' => env('RAZORPAY_KEY_ID', env('NEXT_PUBLIC_RAZORPAY_LIVE_KEY_ID')),
+        'key_secret' => env('RAZORPAY_KEY_SECRET', env('NEXT_PUBLIC_RAZORPAY_LIVE_KEY_SECRET')),
+        'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
     ],
 
     'aprilo' => [

@@ -10,6 +10,8 @@ use App\Http\Controllers\Admin\AgentSupportController;
 use App\Http\Controllers\Admin\ProductManagementController;
 use App\Http\Controllers\Admin\SupportAdminController;
 use App\Http\Controllers\Admin\InvoiceController;
+use App\Http\Controllers\Admin\PaymentLinkController;
+use App\Http\Controllers\PublicPaymentLinkController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -70,6 +72,13 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
             Route::patch('/marketing/leads/{lead}/status', [WhatsAppCampaignController::class, 'updateLeadStatus'])->name('marketing.leads.status');
             Route::delete('/marketing/leads/{lead}', [WhatsAppCampaignController::class, 'destroyLead'])->name('marketing.leads.destroy');
             Route::post('/marketing/trigger-cron', [WhatsAppCampaignController::class, 'triggerWeeklyCron'])->name('marketing.trigger-cron');
+
+            // Payment Link Generator & User Checkout Tracking
+            Route::get('/payment-links', [PaymentLinkController::class, 'index'])->name('payment-links');
+            Route::post('/payment-links', [PaymentLinkController::class, 'store'])->name('payment-links.store');
+            Route::get('/payment-links/{paymentLink}', [PaymentLinkController::class, 'show'])->name('payment-links.show');
+            Route::patch('/payment-links/{paymentLink}/status', [PaymentLinkController::class, 'updateStatus'])->name('payment-links.status');
+            Route::delete('/payment-links/{paymentLink}', [PaymentLinkController::class, 'destroy'])->name('payment-links.destroy');
 
             // Products & Permissions Catalog Management
             Route::get('/products', [ProductManagementController::class, 'index'])->name('products');
@@ -175,4 +184,14 @@ Route::prefix('admin')->name('admin.')->group(function (): void {
         Route::post('/idcards', [AdminConsoleController::class, 'storeIdCard'])->name('idcards.store');
         Route::patch('/idcards/{idcard}', [AdminConsoleController::class, 'updateIdCard'])->name('idcards.update');
     });
+});
+
+// Public Razorpay Payment Link Checkout (No Login Required)
+Route::prefix('pay')->group(function (): void {
+    Route::get('/invoice/{invoice}', [PublicPaymentLinkController::class, 'publicInvoice'])->name('public.pay.invoice');
+    Route::get('/{slug}', [PublicPaymentLinkController::class, 'show'])->name('public.pay.show');
+    Route::post('/{slug}/check-coupon', [PublicPaymentLinkController::class, 'checkCoupon'])->name('public.pay.coupon');
+    Route::post('/{slug}/order', [PublicPaymentLinkController::class, 'createOrder'])->name('public.pay.order');
+    Route::post('/{slug}/verify', [PublicPaymentLinkController::class, 'verifyPayment'])->name('public.pay.verify');
+    Route::get('/{slug}/success/{transaction}', [PublicPaymentLinkController::class, 'success'])->name('public.pay.success');
 });

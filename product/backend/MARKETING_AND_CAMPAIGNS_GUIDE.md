@@ -252,6 +252,44 @@ To enable live message delivery:
 
 ---
 
+## 10. Public Razorpay Payment Link Generator & Checkout Tracking
+
+The **Payment Link Generator** enables Super Administrators to generate public checkout URLs for Aprilo software products and custom services, track client payments in real-time, and automatically deliver sales invoices to customers on WhatsApp.
+
+### Key Capabilities
+1. **Super Admin Management (`/admin/super/payment-links`)**:
+   - Create custom links with:
+     - Target Product (*Aprilo POS, Aprilo Chatbot, Aprilo Agent, Aprilo Commerce, TradeFlow, Custom Software Service*)
+     - Product Type (*SaaS Subscription, Lifetime License, Professional Services*)
+     - Base Amount (₹ INR) & Custom Amount toggle (allows customer to input custom amount)
+     - Promotional Coupons (e.g. `APRILO500`, percentage % or fixed ₹ off, max coupon uses)
+     - Feature Highlights list & Description (why they are paying)
+     - Expiry date & Reusability controls
+   - Real-time Link Metrics: Total Links, Total Views, **How Many Users Paid (`payments_count`)**, Total Failed Attempts, Net Revenue Collected.
+   - Per-Link Deep Audit (`/admin/super/payment-links/{id}`): List of every customer who attempted or completed checkout, tracking status `passed` vs `failed`, with gateway error reasons and generated invoice links.
+
+2. **Public Branded Checkout Page (`/pay/{slug}`)**:
+   - **No Login Required**: Accessible directly by customers on any mobile or desktop browser.
+   - **Official Aprilo Branding**:
+     - *APRILO INFOTECH — A technology brand of APRILO ENTERPRISES*
+     - Registered address: Jaunpur, Uttar Pradesh, India · [apriloinfotech.com](https://apriloinfotech.com)
+     - Detailed product features list and commercial invoice notice.
+   - **Interactive Order Breakdown**:
+     - Dynamic coupon verification and real-time discount deduction.
+     - Customer details input: Full Name, WhatsApp Mobile Number, Email, Billing Address, Company Name, and GSTIN.
+   - **Razorpay Integration**:
+     - Standard Razorpay Checkout popup using `checkout.js`.
+     - Built-in Mock/Test Simulator Mode for sandbox environments without live API keys.
+     - Automatic signature verification and order tracking.
+
+3. **Automated WhatsApp Invoice Delivery**:
+   - Upon successful payment verification (`status = 'passed'`):
+     - Automatically generates an official Aprilo Infotech Sales Invoice (`INV-YYYY-XXX`).
+     - Dispatches a formatted WhatsApp message to the customer's phone with payment confirmation and a 1-click link to view/download the invoice (`/pay/invoice/{id}`) without needing an admin account.
+     - Automatically syncs the customer to the `MarketingLead` pipeline as a `converted` customer.
+
+---
+
 © 2026 **APRILO ENTERPRISES** · Trading as **APRILO INFOTECH**
 *Build Smarter. Grow Faster.*
 

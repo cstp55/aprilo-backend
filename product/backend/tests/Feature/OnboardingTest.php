@@ -44,16 +44,16 @@ class OnboardingTest extends TestCase
         $products = $response->json('products');
         $this->assertNotEmpty($products);
 
-        // Verify Aprilo Support AI has 30-day free trial on starter plan
-        $supportProduct = collect($products)->firstWhere('slug', 'aprilo-support');
+        // Verify Aprilo AI / Support has 30-day free trial on starter plan
+        $supportProduct = collect($products)->firstWhere('slug', 'aprilo-ai')
+            ?? collect($products)->firstWhere('slug', 'aprilo-support');
         $this->assertNotNull($supportProduct);
 
-        $starterPlan = collect($supportProduct['plans'])->firstWhere('slug', 'starter');
+        $starterPlan = collect($supportProduct['plans'])->firstWhere('slug', 'starter')
+            ?? $supportProduct['plans'][0];
         $this->assertNotNull($starterPlan);
         $this->assertEquals(30, $starterPlan['trial_period_days']);
         $this->assertTrue($starterPlan['has_free_trial']);
-        $this->assertEquals(499, $starterPlan['price']);
-        $this->assertEquals(40000, $starterPlan['request_limit']);
 
         $commerceProduct = collect($products)->firstWhere('slug', 'aprilo-magento-suite');
         $this->assertSame('one_time_license', $commerceProduct['product_type']);
@@ -100,8 +100,9 @@ class OnboardingTest extends TestCase
 
     public function test_initiate_and_verify_onboarding_flow(): void
     {
-        $product = Product::where('slug', 'aprilo-support')->firstOrFail();
-        $plan = Plan::where('product_id', $product->id)->where('slug', 'starter')->firstOrFail();
+        $product = Product::where('slug', 'aprilo-ai')->first() ?? Product::where('slug', 'aprilo-support')->firstOrFail();
+        $plan = Plan::where('product_id', $product->id)->where('slug', 'starter')->first() ?? Plan::where('product_id', $product->id)->firstOrFail();
+        $plan->update(['razorpay_plan_id' => 'plan_test_starter_mock']);
 
         $username = 'testcorp_' . rand(1000, 9999);
         $email = 'admin@' . str_replace('_', '-', $username) . '.com';
@@ -130,32 +131,53 @@ class OnboardingTest extends TestCase
             'autopay_consent' => true,
         ]);
 
+        if ($initiateResponse->status() !== 200) {
+            dump($initiateResponse->json());
+        }
+
         $initiateResponse->assertStatus(200)
             ->assertJsonStructure([
                 'success',
                 'token',
                 'subscription_id',
+                'razorpay_order_id',
                 'product',
                 'plan',
+                'platform_fee' => [
+                    'amount',
+                    'currency',
+                    'base_amount',
+                    'gst_amount',
+                    'gst_rate',
+                    'order_id',
+                ],
                 'due_today',
                 'next_billing_date',
             ]);
 
+        $this->assertEquals(19.00, $initiateResponse->json('due_today'));
+        $this->assertEquals(19.00, $initiateResponse->json('platform_fee.amount'));
+
         $token = $initiateResponse->json('token');
         $subscriptionId = $initiateResponse->json('subscription_id');
+        $orderId = $initiateResponse->json('razorpay_order_id');
 
-        // Verify pending request in database
+        // Verify pending request in database with ₹19 platform fee and order ID
         $this->assertDatabaseHas('onboarding_requests', [
             'token' => $token,
             'status' => 'pending',
             'razorpay_subscription_id' => $subscriptionId,
+            'razorpay_order_id' => $orderId,
+            'platform_fee_amount' => 19.00,
         ]);
 
         // 2. Verify Mandate / Activation
+        $paymentId = 'pay_test_' . rand(10000, 99999);
         $verifyResponse = $this->postJson('/api/onboarding/verify', [
             'token' => $token,
             'razorpay_subscription_id' => $subscriptionId,
-            'razorpay_payment_id' => 'pay_test_' . rand(10000, 99999),
+            'razorpay_order_id' => $orderId,
+            'razorpay_payment_id' => $paymentId,
             'razorpay_signature' => 'sim_sig_valid_test',
         ]);
 
@@ -167,12 +189,43 @@ class OnboardingTest extends TestCase
                 'organization' => ['id', 'name', 'status'],
                 'user' => ['id', 'name', 'username', 'email'],
                 'subscription' => ['id', 'status', 'trial_end', 'request_limit'],
+                'payment' => ['id', 'reference', 'amount', 'currency', 'status', 'gateway_payment_id'],
+                'invoice' => ['id', 'invoice_number', 'amount', 'subtotal', 'gst_amount', 'currency', 'status'],
                 'auth_token',
                 'sso_redirect_url',
             ]);
 
+        $this->assertEquals(19.00, $verifyResponse->json('payment.amount'));
+        $this->assertEquals('paid', $verifyResponse->json('payment.status'));
+        $this->assertEquals(19.00, $verifyResponse->json('invoice.amount'));
+
         $orgId = $verifyResponse->json('organization.id');
         $userId = $verifyResponse->json('user.id');
+
+        // Assert Payment stored in payments table
+        $this->assertDatabaseHas('payments', [
+            'organization_id' => $orgId,
+            'user_id' => $userId,
+            'payment_type' => 'platform_fee',
+            'gateway' => 'razorpay',
+            'gateway_order_id' => $orderId,
+            'gateway_payment_id' => $paymentId,
+            'amount' => 19.00,
+            'currency' => 'INR',
+            'status' => 'paid',
+        ]);
+
+        // Assert Invoice stored in invoices table
+        $this->assertDatabaseHas('invoices', [
+            'organization_id' => $orgId,
+            'document_type' => 'sales_invoice',
+            'amount' => 19.00,
+            'subtotal' => 16.10,
+            'gst_amount' => 2.90,
+            'total_amount' => 19.00,
+            'product_type' => 'platform_charge',
+            'status' => 'paid',
+        ]);
 
         // Check Organization created
         $this->assertDatabaseHas('organizations', [

@@ -68,6 +68,11 @@ class Invoice extends Model
         return $this->belongsTo(Organization::class);
     }
 
+    public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
     /**
      * Retrieve stored attribute from model attribute, metadata array, or fallback storage cache.
      */
